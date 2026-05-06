@@ -47,14 +47,6 @@ router = APIRouter(tags=["webhooks"])
 # Pre-flight helpers (asyncio.to_thread wrappers)
 # ---------------------------------------------------------------------------
 
-# Body content shorter than this is treated as "no real body" and the
-# email becomes a rejected stub instead of a body-rendered triage row.
-# Most useful body-only invoices are at least a couple hundred chars
-# (greeting + amount + payment terms), so this threshold filters out
-# auto-replies that contain a few words like "got it, thanks".
-MIN_BODY_LENGTH_FOR_RENDER = 80
-
-
 async def _safe_page_count(content: bytes, filename: str) -> int | None:
     """Best-effort page count off the event loop."""
     count = await asyncio.to_thread(pdf_inspect.page_count, content)
@@ -89,7 +81,7 @@ async def postmark_inbound(
         payload: dict[str, Any] = await request.json()
     except Exception as exc:
         log.warning("Postmark webhook body is not JSON: %s", exc)
-        raise HTTPException(status_code=400, detail="Invalid JSON body")
+        raise HTTPException(status_code=400, detail="Invalid JSON body") from exc
 
     message_id: str | None = payload.get("MessageID") or payload.get("MessageId")
     if not message_id:
@@ -161,7 +153,7 @@ async def resend_inbound_webhook(
         event: dict[str, Any] = await request.json()
     except Exception as exc:
         log.warning("Resend webhook body is not JSON: %s", exc)
-        raise HTTPException(status_code=400, detail="Invalid JSON body")
+        raise HTTPException(status_code=400, detail="Invalid JSON body") from exc
 
     event_type = event.get("type")
     if event_type != "email.received":
@@ -193,7 +185,7 @@ async def resend_inbound_webhook(
         )
     except resend_inbound.ResendInboundError as exc:
         log.exception("Resend fetch_email_content failed for %s", email_id)
-        raise HTTPException(status_code=502, detail=f"Resend API: {exc}")
+        raise HTTPException(status_code=502, detail=f"Resend API: {exc}") from exc
 
     # Fetch attachments. Per-attachment failures are logged and skipped
     # inside fetch_attachments — only an outer 4xx/5xx raises here.
@@ -203,7 +195,7 @@ async def resend_inbound_webhook(
         )
     except resend_inbound.ResendInboundError as exc:
         log.exception("Resend fetch_attachments failed for %s", email_id)
-        raise HTTPException(status_code=502, detail=f"Resend API: {exc}")
+        raise HTTPException(status_code=502, detail=f"Resend API: {exc}") from exc
 
     pdfs = resend_inbound.filter_pdfs(all_attachments)
     if all_attachments and not pdfs:
@@ -266,7 +258,7 @@ async def _process_inbound_email(
     # Path A — no PDF attachments.
     if not attachments:
         rendered_payload = (body_text or body_html or "").strip()
-        if len(rendered_payload) >= MIN_BODY_LENGTH_FOR_RENDER:
+        if rendered_payload:
             return await _ingest_body_only(
                 session=session,
                 background=background,

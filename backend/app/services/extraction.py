@@ -18,14 +18,25 @@ import io
 import json
 import logging
 import re
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
 import pypdf
+from anthropic import APIConnectionError as AnthropicAPIConnectionError
+from anthropic import APIStatusError as AnthropicAPIStatusError
+from anthropic import APITimeoutError as AnthropicAPITimeoutError
 from anthropic import AsyncAnthropic
+from anthropic import RateLimitError as AnthropicRateLimitError
+from openai import APIConnectionError as OpenAIAPIConnectionError
+from openai import APIStatusError as OpenAIAPIStatusError
+from openai import APITimeoutError as OpenAIAPITimeoutError
+from openai import AsyncOpenAI
+from openai import RateLimitError as OpenAIRateLimitError
 from pdf2image import convert_from_bytes
 from PIL import Image
-from rapidfuzz import fuzz, process as fuzz_process
+from rapidfuzz import fuzz
+from rapidfuzz import process as fuzz_process
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,6 +68,22 @@ MAX_TOKENS = 16384
 # render can spike to ~150–250MB during PDF→PNG conversion; running more
 # than two at once on a small Coolify container often triggers OOM.
 _EXTRACTION_SEMAPHORE = asyncio.Semaphore(2)
+
+
+@dataclass(frozen=True)
+class ExtractionProvider:
+    name: str
+    extract: callable
+
+
+@dataclass(frozen=True)
+class ExtractionResult:
+    provider_name: str
+    payload: dict[str, Any]
+
+
+class ExtractionProvidersUnavailableError(RuntimeError):
+    pass
 
 
 async def extract_invoice(invoice_id: UUID) -> None:
@@ -108,8 +135,8 @@ async def _run(session: AsyncSession, invoice_id: UUID) -> None:
     if not invoice.pdf_page_count:
         invoice.pdf_page_count = len(page_images)
 
-    result = await _call_claude(page_images)
-    fields = ExtractedFields.model_validate(result)
+    result = await _try_extract_with_fallback(page_images)
+    fields = ExtractedFields.model_validate(result.payload)
 
     # Match vendor
     vendor_id: UUID | None = None
@@ -311,7 +338,7 @@ async def _call_claude(page_images: list[tuple[int, int, bytes]]) -> dict[str, A
     if not settings.anthropic_api_key:
         raise RuntimeError("ANTHROPIC_API_KEY not configured")
 
-    client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+    client = AsyncAnthropic(api_key=settings.anthropic_api_key, max_retries=0)
 
     content: list[dict[str, Any]] = []
     rendered_pages = [pn for pn, _, _ in page_images]
@@ -355,6 +382,145 @@ async def _call_claude(page_images: list[tuple[int, int, bytes]]) -> dict[str, A
 
     text_parts = [block.text for block in resp.content if block.type == "text"]
     raw = "\n".join(text_parts).strip()
+    return _parse_model_json(raw, provider_name="Anthropic")
+
+
+async def _call_openai(page_images: list[tuple[int, int, bytes]]) -> dict[str, Any]:
+    settings = get_settings()
+    if not settings.openai_api_key:
+        raise RuntimeError("OPENAI_API_KEY not configured")
+
+    client = AsyncOpenAI(api_key=settings.openai_api_key, max_retries=0)
+
+    content: list[dict[str, Any]] = []
+    rendered_pages = [pn for pn, _, _ in page_images]
+    total_pages = page_images[0][1] if page_images else 0
+    for page_num, total, png in page_images:
+        content.append(
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/png;base64,{base64.b64encode(png).decode('ascii')}",
+                    "detail": "high",
+                },
+            }
+        )
+        content.append({"type": "text", "text": f"Page {page_num} of {total}"})
+    if rendered_pages and len(rendered_pages) < total_pages:
+        omitted = sorted(set(range(1, total_pages + 1)) - set(rendered_pages))
+        content.append(
+            {
+                "type": "text",
+                "text": (
+                    f"Note: pages {omitted} of this {total_pages}-page document "
+                    "were not provided. Some line items are therefore not "
+                    "visible. Use the totals printed on the trailing pages "
+                    "(subtotal, tax, total) as the source of truth — do NOT "
+                    "compute totals by summing only the line items you can see."
+                ),
+            }
+        )
+    content.append({"type": "text", "text": EXTRACTION_PROMPT})
+
+    resp = await client.chat.completions.create(
+        model=settings.openai_extraction_model,
+        response_format={"type": "json_object"},
+        messages=[{"role": "user", "content": content}],
+    )
+    raw = (resp.choices[0].message.content or "").strip()
+    if not raw:
+        raise ValueError("OpenAI returned empty output")
+    return _parse_model_json(raw, provider_name="OpenAI")
+
+
+async def _try_extract_with_fallback(
+    page_images: list[tuple[int, int, bytes]],
+    *,
+    providers: list[ExtractionProvider] | None = None,
+    is_transient_error: callable | None = None,
+    sleep: callable = asyncio.sleep,
+    max_attempts: int = 3,
+    base_delay_seconds: float = 1.0,
+) -> ExtractionResult:
+    providers = providers or _build_extraction_providers()
+    if not providers:
+        raise RuntimeError("No extraction providers configured")
+
+    transient_check = is_transient_error or _is_transient_extraction_error
+    failures: list[str] = []
+
+    for provider in providers:
+        last_exc: Exception | None = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                payload = await provider.extract(page_images)
+                return ExtractionResult(provider_name=provider.name, payload=payload)
+            except Exception as exc:
+                last_exc = exc
+                if not transient_check(exc):
+                    raise
+                if attempt == max_attempts:
+                    break
+                delay = base_delay_seconds * (2 ** (attempt - 1))
+                log.warning(
+                    "Extraction provider %s transient failure on attempt %s/%s: %s",
+                    provider.name,
+                    attempt,
+                    max_attempts,
+                    exc,
+                )
+                await _sleep(sleep, delay)
+
+        if last_exc is not None:
+            failures.append(f"{provider.name}: {last_exc}")
+            log.warning(
+                "Extraction provider %s exhausted after %s attempts; trying next provider",
+                provider.name,
+                max_attempts,
+            )
+
+    raise ExtractionProvidersUnavailableError(
+        "All extraction providers unavailable: " + "; ".join(failures)
+    )
+
+
+def _build_extraction_providers() -> list[ExtractionProvider]:
+    settings = get_settings()
+    providers: list[ExtractionProvider] = []
+    if settings.anthropic_api_key:
+        providers.append(ExtractionProvider(name="anthropic", extract=_call_claude))
+    if settings.openai_api_key:
+        providers.append(ExtractionProvider(name="openai", extract=_call_openai))
+    return providers
+
+
+def _is_transient_extraction_error(exc: Exception) -> bool:
+    if isinstance(
+        exc,
+        (
+            AnthropicRateLimitError,
+            AnthropicAPIConnectionError,
+            AnthropicAPITimeoutError,
+            OpenAIRateLimitError,
+            OpenAIAPIConnectionError,
+            OpenAIAPITimeoutError,
+        ),
+    ):
+        return True
+    if isinstance(exc, AnthropicAPIStatusError):
+        return exc.status_code >= 500
+    if isinstance(exc, OpenAIAPIStatusError):
+        return exc.status_code >= 500
+    return False
+
+
+async def _sleep(sleeper: callable, delay_seconds: float) -> None:
+    maybe_awaitable = sleeper(delay_seconds)
+    if asyncio.iscoroutine(maybe_awaitable):
+        await maybe_awaitable
+
+
+def _parse_model_json(raw: str, *, provider_name: str) -> dict[str, Any]:
     # Strip code fences if the model slips and uses them
     if raw.startswith("```"):
         raw = raw.strip("`")
@@ -375,8 +541,8 @@ async def _call_claude(page_images: list[tuple[int, int, bytes]]) -> dict[str, A
             except json.JSONDecodeError:
                 pass
         raise ValueError(
-            f"Claude returned non-JSON output: {first_err}\n---\n{raw[:500]}"
-        )
+            f"{provider_name} returned non-JSON output: {first_err}\n---\n{raw[:500]}"
+        ) from first_err
 
 
 # Match `"some_key": <num> + <num> [+ <num> ...]` appearing as a JSON

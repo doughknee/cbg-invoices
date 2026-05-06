@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from pydantic import Field
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     # Anthropic
     anthropic_api_key: str = ""
     extraction_model: str = "claude-sonnet-4-5"
+
+    # OpenAI fallback
+    openai_api_key: str = ""
+    openai_extraction_model: str = "gpt-4o"
 
     # R2
     r2_account_id: str = ""
