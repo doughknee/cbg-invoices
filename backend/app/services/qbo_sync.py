@@ -21,10 +21,12 @@ async def sync_vendors(session: AsyncSession) -> int:
     rows = await qbo_client.qbo_query(session, "SELECT * FROM Vendor")
     now = datetime.now(UTC)
     count = 0
+    seen_qbo_ids: set[str] = set()
     for row in rows:
         qbo_id = str(row.get("Id"))
         if not qbo_id:
             continue
+        seen_qbo_ids.add(qbo_id)
         display = row.get("DisplayName") or row.get("CompanyName") or "Unnamed"
         email = None
         if isinstance(row.get("PrimaryEmailAddr"), dict):
@@ -50,6 +52,8 @@ async def sync_vendors(session: AsyncSession) -> int:
                 )
             )
         count += 1
+
+    await _deactivate_missing_vendors(session, seen_qbo_ids, now)
 
     # Mark the sync timestamp on the token row
     token = (await session.execute(select(QboToken).where(QboToken.id == 1))).scalar_one_or_none()
@@ -101,10 +105,12 @@ async def sync_projects(session: AsyncSession) -> int:
 
     now = datetime.now(UTC)
     count = 0
+    seen_qbo_ids: set[str] = set()
     for row in rows:
         qbo_id = str(row.get("Id"))
         if not qbo_id:
             continue
+        seen_qbo_ids.add(qbo_id)
         parent: str | None = None
         if isinstance(row.get("ParentRef"), dict):
             parent = row["ParentRef"].get("value")
@@ -132,8 +138,34 @@ async def sync_projects(session: AsyncSession) -> int:
             )
         count += 1
 
+    await _deactivate_missing_projects(session, seen_qbo_ids, now)
+
     if token:
         token.last_project_sync_at = now
     await session.flush()
     log.info("Synced %d projects (%s) from QBO", count, qbo_type)
     return count
+
+
+async def _deactivate_missing_vendors(
+    session: AsyncSession,
+    seen_qbo_ids: set[str],
+    now: datetime,
+) -> None:
+    rows = (await session.execute(select(Vendor).where(Vendor.qbo_id.is_not(None)))).scalars().all()
+    for vendor in rows:
+        if vendor.qbo_id not in seen_qbo_ids:
+            vendor.active = False
+            vendor.last_synced_at = now
+
+
+async def _deactivate_missing_projects(
+    session: AsyncSession,
+    seen_qbo_ids: set[str],
+    now: datetime,
+) -> None:
+    rows = (await session.execute(select(Project).where(Project.qbo_id.is_not(None)))).scalars().all()
+    for project in rows:
+        if project.qbo_id not in seen_qbo_ids:
+            project.active = False
+            project.last_synced_at = now
