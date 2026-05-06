@@ -5,7 +5,7 @@
  * Logto OAuth flow) and Request access (opens an in-app modal that POSTs
  * to /api/access-requests — admins see the queue on the Team page).
  */
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useLogto } from "@logto/react";
 import { useEffect, useState } from "react";
 import { ArrowRightIcon, EnvelopeIcon } from "@heroicons/react/24/outline";
@@ -123,11 +123,17 @@ function Landing() {
         </div>
       </main>
 
-      <footer className="absolute bottom-6 left-8 right-8 flex items-center justify-between text-[11px] uppercase tracking-widest text-graphite/50">
+      <footer className="absolute bottom-6 left-8 right-8 flex flex-col gap-3 text-[11px] uppercase tracking-widest text-graphite/50 sm:flex-row sm:items-center sm:justify-between">
         <span>© {new Date().getFullYear()} Cambridge Building Group</span>
-        <span className="hidden sm:inline">
-          Accounts Payable · Invoice Portal
-        </span>
+        <div className="flex flex-wrap items-center gap-4">
+          <Link to="/privacy" className="hover:text-navy transition-colors">
+            Privacy Policy
+          </Link>
+          <Link to="/eula" className="hover:text-navy transition-colors">
+            End User License Agreement
+          </Link>
+          <span className="hidden sm:inline">Accounts Payable · Invoice Portal</span>
+        </div>
       </footer>
 
       <RequestAccessModal

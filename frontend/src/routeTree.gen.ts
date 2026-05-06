@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as InviteRouteImport } from './routes/invite'
 import { Route as CallbackRouteImport } from './routes/callback'
+import { Route as EulaRouteImport } from './routes/eula'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthedVendorsRouteImport } from './routes/_authed.vendors'
@@ -29,6 +31,16 @@ const InviteRoute = InviteRouteImport.update({
 const CallbackRoute = CallbackRouteImport.update({
   id: '/callback',
   path: '/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EulaRoute = EulaRouteImport.update({
+  id: '/eula',
+  path: '/eula',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthedRoute = AuthedRouteImport.update({
@@ -79,7 +91,9 @@ const AuthedInvoicesIdRoute = AuthedInvoicesIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/callback': typeof CallbackRoute
+  '/eula': typeof EulaRoute
   '/invite': typeof InviteRoute
+  '/privacy': typeof PrivacyRoute
   '/audit': typeof AuthedAuditRoute
   '/invoices': typeof AuthedInvoicesRoute
   '/projects': typeof AuthedProjectsRoute
@@ -91,7 +105,9 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/callback': typeof CallbackRoute
+  '/eula': typeof EulaRoute
   '/invite': typeof InviteRoute
+  '/privacy': typeof PrivacyRoute
   '/audit': typeof AuthedAuditRoute
   '/invoices': typeof AuthedInvoicesRoute
   '/projects': typeof AuthedProjectsRoute
@@ -105,7 +121,9 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authed': typeof AuthedRouteWithChildren
   '/callback': typeof CallbackRoute
+  '/eula': typeof EulaRoute
   '/invite': typeof InviteRoute
+  '/privacy': typeof PrivacyRoute
   '/_authed/audit': typeof AuthedAuditRoute
   '/_authed/invoices': typeof AuthedInvoicesRoute
   '/_authed/projects': typeof AuthedProjectsRoute
@@ -119,7 +137,9 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/callback'
+    | '/eula'
     | '/invite'
+    | '/privacy'
     | '/audit'
     | '/invoices'
     | '/projects'
@@ -131,7 +151,9 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/callback'
+    | '/eula'
     | '/invite'
+    | '/privacy'
     | '/audit'
     | '/invoices'
     | '/projects'
@@ -144,7 +166,9 @@ export interface FileRouteTypes {
     | '/'
     | '/_authed'
     | '/callback'
+    | '/eula'
     | '/invite'
+    | '/privacy'
     | '/_authed/audit'
     | '/_authed/invoices'
     | '/_authed/projects'
@@ -158,7 +182,9 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthedRoute: typeof AuthedRouteWithChildren
   CallbackRoute: typeof CallbackRoute
+  EulaRoute: typeof EulaRoute
   InviteRoute: typeof InviteRoute
+  PrivacyRoute: typeof PrivacyRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -175,6 +201,20 @@ declare module '@tanstack/react-router' {
       path: '/callback'
       fullPath: '/callback'
       preLoaderRoute: typeof CallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/eula': {
+      id: '/eula'
+      path: '/eula'
+      fullPath: '/eula'
+      preLoaderRoute: typeof EulaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authed': {
@@ -270,7 +310,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthedRoute: AuthedRouteWithChildren,
   CallbackRoute: CallbackRoute,
+  EulaRoute: EulaRoute,
   InviteRoute: InviteRoute,
+  PrivacyRoute: PrivacyRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
