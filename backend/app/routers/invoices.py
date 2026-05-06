@@ -20,8 +20,8 @@ from pypdf import PdfReader
 from sqlalchemy import desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.deps import CurrentUser, get_current_user
 from app.db import get_session
+from app.deps import CurrentUser, get_current_user
 from app.models.invoice import Invoice, InvoiceStatus
 from app.schemas.invoice import (
     AssignInvoiceRequest,
@@ -31,7 +31,7 @@ from app.schemas.invoice import (
     InvoicePatch,
     RejectInvoiceRequest,
 )
-from app.services import audit, extraction, storage, trusted_domains
+from app.services import audit, extraction, logto_admin, storage, trusted_domains
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["invoices"])
@@ -290,9 +290,34 @@ async def patch_invoice(
 #   approved ──► ready_for_review   (unapprove, back to editing)
 #
 # Assignment is a *workflow signaling* feature — having an assignee moves
-# the invoice from "Need Review" to "Assigned" in the queue UI, but doesn't
-# gate permission to act. Anyone authenticated can still approve / post /
-# reassign / etc. regardless of who's assigned.
+# the invoice from "Need Review" to "Assigned" in the queue UI, and now also
+# gates review actions. Admins/owners manage assignment; only the assignee can
+# approve, unapprove, or post to QBO.
+
+
+async def _require_assignment_manager(user: CurrentUser) -> None:
+    role = await logto_admin.user_app_role(user.id) or "member"
+    if role not in {"owner", "admin"}:
+        raise HTTPException(
+            status_code=403,
+            detail="Only admins and owners can assign invoices",
+        )
+
+
+def _ensure_review_assignee(invoice: Invoice, user: CurrentUser, *, action: str) -> None:
+    if not invoice.assigned_to_id:
+        raise HTTPException(
+            status_code=409,
+            detail=f"This invoice must be assigned before you can {action}.",
+        )
+    if invoice.assigned_to_id != user.id:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"Only the assigned user can {action}. "
+                "Reassign the invoice if someone else needs to handle it."
+            ),
+        )
 
 
 def _ensure_approvable(invoice: Invoice) -> None:
@@ -356,6 +381,7 @@ async def approve_invoice(
     invoice = await session.get(Invoice, invoice_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
+    _ensure_review_assignee(invoice, user, action="approve")
     _ensure_approvable(invoice)
 
     _mark_approved(invoice, user)
@@ -385,6 +411,7 @@ async def post_invoice_to_qbo(
     invoice = await session.get(Invoice, invoice_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
+    _ensure_review_assignee(invoice, user, action="post to QBO")
     if invoice.status == InvoiceStatus.POSTED_TO_QBO:
         raise HTTPException(status_code=409, detail="Already posted to QBO")
     if invoice.status != InvoiceStatus.APPROVED:
@@ -420,6 +447,7 @@ async def approve_and_post(
     invoice = await session.get(Invoice, invoice_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
+    _ensure_review_assignee(invoice, user, action="approve and post")
     _ensure_approvable(invoice)
     _ensure_postable(invoice)
 
@@ -449,6 +477,7 @@ async def unapprove_invoice(
     invoice = await session.get(Invoice, invoice_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
+    _ensure_review_assignee(invoice, user, action="unapprove")
     if invoice.status != InvoiceStatus.APPROVED:
         raise HTTPException(
             status_code=409,
@@ -478,6 +507,7 @@ async def assign_invoice(
     user: Annotated[CurrentUser, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ):
+    await _require_assignment_manager(user)
     invoice = await session.get(Invoice, invoice_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -504,6 +534,7 @@ async def unassign_invoice(
     user: Annotated[CurrentUser, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ):
+    await _require_assignment_manager(user)
     invoice = await session.get(Invoice, invoice_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -665,7 +696,7 @@ async def trust_sender_and_promote(
             source="promoted_from_triage",
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     await audit.record(
         session,

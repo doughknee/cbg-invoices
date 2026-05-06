@@ -10,7 +10,6 @@ import {
   PaperAirplaneIcon,
   PencilSquareIcon,
   UserCircleIcon,
-  UserPlusIcon,
   XCircleIcon,
 } from "@heroicons/react/24/outline";
 // ClockIcon stays in scope below — used in the StatusBanner for the
@@ -47,6 +46,7 @@ import {
   useVendors,
   type InvoicePatchPayload,
 } from "@/lib/invoices";
+import { ROLE_RANK, useMe } from "@/lib/users";
 import type { TeamMember } from "@/lib/users";
 import type { Invoice, Project, QboStatus, Vendor } from "@/types";
 import { useQboStatus } from "@/lib/qbo";
@@ -77,6 +77,7 @@ function InvoiceDetailPage() {
   const vendorsQuery = useVendors();
   const projectsQuery = useProjects();
   const qboQuery = useQboStatus();
+  const meQuery = useMe();
 
   const patch = usePatchInvoice(id);
   const approve = useApproveInvoice(id);
@@ -130,10 +131,15 @@ function InvoiceDetailPage() {
 
   // Assignment modals — one flow per action that needs an assignee.
   const [assignFlow, setAssignFlow] = useState<
-    null | "approve-and-assign" | "reassign"
+    null | "assign" | "reassign"
   >(null);
 
   const invoice = invoiceQuery.data;
+  const me = meQuery.data;
+  const myRole = me?.role ?? "member";
+  const canManageAssignments = ROLE_RANK[myRole] >= ROLE_RANK.admin;
+  const isAssignee = !!invoice && !!me && invoice.assigned_to_id === me.id;
+  const canReviewActions = !!invoice && !!me && isAssignee;
 
   // Mobile app-bar title: "Review" + status badge inline. Keep concise so
   // the right side has room for the back button.
@@ -202,13 +208,16 @@ function InvoiceDetailPage() {
       const meta = e.metaKey || e.ctrlKey;
       if (!meta) return;
       if (e.key === "Enter" && !e.shiftKey) {
+        if (!canReviewActions) return;
         e.preventDefault();
         if (mode === "review") void handleApprove();
         else if (invoice.status === "approved") void handlePost();
       } else if (e.key === "Enter" && e.shiftKey) {
+        if (!canReviewActions) return;
         e.preventDefault();
         if (mode === "review") void handleApproveAndPost();
       } else if (e.shiftKey && (e.key === "R" || e.key === "r")) {
+        if (!canReviewActions) return;
         e.preventDefault();
         setShowRejectModal(true);
       }
@@ -216,7 +225,7 @@ function InvoiceDetailPage() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invoice, mode]);
+  }, [invoice, mode, canReviewActions]);
 
   if (invoiceQuery.isLoading) {
     return <div className="py-20 text-center text-slate-500 text-sm">Loading invoice…</div>;
@@ -267,13 +276,11 @@ function InvoiceDetailPage() {
     setForceEdit(false);
   }
 
-  async function handleApproveAndAssign(member: TeamMember | null) {
+  async function handleAssign(member: TeamMember | null) {
     if (!member) {
       setAssignFlow(null);
       return;
     }
-    await flushDirty();
-    await approve.mutateAsync();
     await assign.mutateAsync({
       user_id: member.id,
       user_email: member.email,
@@ -325,21 +332,21 @@ function InvoiceDetailPage() {
   }
 
   const pickerTitle: Record<NonNullable<typeof assignFlow>, string> = {
-    "approve-and-assign": "Approve & assign",
+    assign: "Assign invoice",
     reassign: "Reassign invoice",
   };
   const pickerDescription: Record<NonNullable<typeof assignFlow>, string> = {
-    "approve-and-assign": "Approve this invoice and put it on someone else's plate.",
+    assign: "Choose who should review and approve this invoice.",
     reassign: "Move this invoice to a different team member.",
   };
   const pickerConfirm: Record<NonNullable<typeof assignFlow>, string> = {
-    "approve-and-assign": "Approve & assign",
+    assign: "Assign",
     reassign: "Reassign",
   };
 
   async function onPickerSelect(member: TeamMember | null) {
     if (!assignFlow) return;
-    if (assignFlow === "approve-and-assign") await handleApproveAndAssign(member);
+    if (assignFlow === "assign") await handleAssign(member);
     else if (assignFlow === "reassign") await handleReassign(member);
   }
 
@@ -372,7 +379,7 @@ function InvoiceDetailPage() {
             Re-extract
           </Button>
         )}
-        {invoice.status === "approved" && invoice.qbo_post_error && (
+        {invoice.status === "approved" && invoice.qbo_post_error && canReviewActions && (
           <Button
             variant="primary"
             size="sm"
@@ -395,7 +402,7 @@ function InvoiceDetailPage() {
           <span className="text-graphite font-medium">
             {invoice.assigned_to_name || invoice.assigned_to_email || invoice.assigned_to_id}
           </span>
-          {(mode === "review" || invoice.status === "approved") && (
+          {canManageAssignments && (mode === "review" || invoice.status === "approved") && (
             <>
               <button
                 type="button"
@@ -498,7 +505,7 @@ function InvoiceDetailPage() {
                 setDirty(true);
               }}
               onCodingChange={setCodingDraft}
-              disabled={false}
+              disabled={!canReviewActions}
             />
           ) : (
             <ReadOnlyView
@@ -507,6 +514,7 @@ function InvoiceDetailPage() {
               projects={projectsQuery.data?.projects ?? []}
               onEdit={handleEdit}
               editBusy={unapprove.isPending}
+              canEdit={canReviewActions}
             />
           )}
         </div>
@@ -533,10 +541,12 @@ function InvoiceDetailPage() {
           onReject={() => setShowRejectModal(true)}
           onApprove={handleApprove}
           onApproveAndPost={handleApproveAndPost}
-          onApproveAndAssign={() => setAssignFlow("approve-and-assign")}
+          onAssign={() => setAssignFlow("assign")}
           onPost={handlePost}
           onUnapprove={handleUnapprove}
           patchPending={patch.isPending}
+          canManageAssignments={canManageAssignments}
+          canReviewActions={canReviewActions}
         />
       )}
 
@@ -828,18 +838,21 @@ function ReadOnlyView({
   projects,
   onEdit,
   editBusy,
+  canEdit,
 }: {
   invoice: Invoice;
   vendors: Vendor[];
   projects: Project[];
   onEdit: () => void;
   editBusy: boolean;
+  canEdit: boolean;
 }) {
-  const canEdit =
+  const showEdit =
+    canEdit &&
     invoice.status !== "posted_to_qbo" && invoice.status !== "rejected";
   return (
     <div className="space-y-4">
-      {canEdit && (
+      {showEdit && (
         <div className="flex items-center gap-2 flex-wrap">
           <Button
             variant="secondary"
@@ -880,10 +893,12 @@ interface FooterProps {
   onReject: () => void;
   onApprove: () => void;
   onApproveAndPost: () => void;
-  onApproveAndAssign: () => void;
+  onAssign: () => void;
   onPost: () => void;
   onUnapprove: () => void;
   patchPending: boolean;
+  canManageAssignments: boolean;
+  canReviewActions: boolean;
 }
 
 function ActionFooter(props: FooterProps) {
@@ -900,10 +915,12 @@ function ActionFooter(props: FooterProps) {
     onReject,
     onApprove,
     onApproveAndPost,
-    onApproveAndAssign,
+    onAssign,
     onPost,
     onUnapprove,
     patchPending,
+    canManageAssignments,
+    canReviewActions,
   } = props;
 
   // Pick the primary action based on status
@@ -917,28 +934,35 @@ function ActionFooter(props: FooterProps) {
   let options: SplitButtonOption[] = [];
 
   if (invoice.status === "ready_for_review" || invoice.status === "extraction_failed") {
-    primary = {
-      label: "Approve",
-      onClick: onApprove,
-    };
-    options = [
-      {
-        label: "Approve & Post to QBO",
-        description: qboConnected
-          ? "Sends to QuickBooks immediately"
-          : "Connect QuickBooks in Settings first",
-        onSelect: onApproveAndPost,
-        disabled: !qboConnected,
-        icon: <PaperAirplaneIcon className="h-4 w-4" />,
-      },
-      {
-        label: "Approve & assign to…",
-        description: "Approve and put it on someone's plate",
-        onSelect: onApproveAndAssign,
-        icon: <UserPlusIcon className="h-4 w-4" />,
-      },
-    ];
+    if (!invoice.assigned_to_id && canManageAssignments) {
+      primary = {
+        label: "Assign",
+        onClick: onAssign,
+      };
+      options = [];
+    } else if (canReviewActions) {
+      primary = {
+        label: "Approve",
+        onClick: onApprove,
+      };
+      options = [
+        {
+          label: "Approve & Post to QBO",
+          description: qboConnected
+            ? "Sends to QuickBooks immediately"
+            : "Connect QuickBooks in Settings first",
+          onSelect: onApproveAndPost,
+          disabled: !qboConnected,
+          icon: <PaperAirplaneIcon className="h-4 w-4" />,
+        },
+      ];
+    } else {
+      return null;
+    }
   } else if (invoice.status === "approved") {
+    if (!canReviewActions) {
+      return null;
+    }
     primary = {
       label: "Post to QBO",
       onClick: onPost,
@@ -960,7 +984,7 @@ function ActionFooter(props: FooterProps) {
 
   // We only reach this point in non-terminal states (ready_for_review,
   // extraction_failed, approved), so Reject is always allowed here.
-  const rejectVisible = true;
+  const rejectVisible = canReviewActions;
 
   // When forceEdit is on for an already-approved invoice, show an edit-mode
   // footer instead — "Save and re-approve" etc.
@@ -970,7 +994,7 @@ function ActionFooter(props: FooterProps) {
   // mobile a single full-width primary button is the only main control.
   // Desktop still surfaces them inline.
   const mobileExtraOptions: SplitButtonOption[] = [];
-  if (showEditor) {
+  if (showEditor && canReviewActions) {
     mobileExtraOptions.push({
       label: dirty ? "Save draft" : "Saved",
       description: dirty
@@ -1047,7 +1071,7 @@ function ActionFooter(props: FooterProps) {
               Reject
             </Button>
           )}
-          {showEditor && (
+          {showEditor && canReviewActions && (
             <Button
               variant="secondary"
               onClick={onSave}
