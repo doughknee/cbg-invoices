@@ -34,7 +34,7 @@ services:
       retries: 10
 
   logto:
-    image: svhd/logto:latest
+    image: svhd/logto:1.39.0
     restart: unless-stopped
     depends_on:
       postgres:
