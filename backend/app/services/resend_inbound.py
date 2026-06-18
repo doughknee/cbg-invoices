@@ -22,7 +22,7 @@ import hashlib
 import hmac
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.utils import parseaddr
 from typing import Any
 
@@ -89,7 +89,7 @@ def verify_signature(
         ts = int(svix_timestamp)
     except (TypeError, ValueError):
         return False
-    now = int(datetime.now(timezone.utc).timestamp())
+    now = int(datetime.now(UTC).timestamp())
     if abs(now - ts) > MAX_WEBHOOK_AGE_SECONDS:
         return False
 
@@ -239,12 +239,12 @@ def filter_pdfs(items: list[InboundAttachment]) -> list[InboundAttachment]:
 def parse_received_at(value: str | None):
     """Parse Resend's ISO 8601 timestamp; falls back to now() on failure."""
     if not value:
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
     try:
         # Python 3.11+ accepts trailing 'Z' via this swap.
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
 
 
 def parse_sender_email(from_field: str | None) -> str | None:

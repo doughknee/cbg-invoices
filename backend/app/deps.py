@@ -41,17 +41,17 @@ async def get_current_user(
     try:
         verified = await verify_access_token(token)
     except jwt.ExpiredSignatureError:
-        raise _unauthorized("Token expired")
+        raise _unauthorized("Token expired") from None
     except jwt.InvalidAudienceError:
-        raise _unauthorized("Invalid audience")
+        raise _unauthorized("Invalid audience") from None
     except jwt.InvalidIssuerError:
-        raise _unauthorized("Invalid issuer")
+        raise _unauthorized("Invalid issuer") from None
     except jwt.InvalidTokenError as exc:
         log.info("Invalid token: %s", exc)
-        raise _unauthorized("Invalid token")
+        raise _unauthorized("Invalid token") from exc
     except Exception as exc:
         log.exception("Token verification failed unexpectedly")
-        raise _unauthorized(f"Token verification failed: {exc}")
+        raise _unauthorized(f"Token verification failed: {exc}") from exc
 
     return CurrentUser(
         id=verified.sub,

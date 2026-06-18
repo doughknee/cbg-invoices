@@ -11,7 +11,7 @@ export function formatCents(cents: number | null | undefined, currency = "USD"):
 }
 
 export function parseDollars(value: string): number | null {
-  const trimmed = value.trim().replace(/[^0-9.\-]/g, "");
+  const trimmed = value.trim().replace(/[^0-9.-]/g, "");
   if (!trimmed || trimmed === "-") return null;
   const n = Number(trimmed);
   if (Number.isNaN(n)) return null;

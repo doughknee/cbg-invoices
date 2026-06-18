@@ -9,7 +9,7 @@ export const qk = {
 
   invoices: {
     root: () => [...qk.all, "invoices"] as const,
-    list: (params: Record<string, unknown>) => [...qk.invoices.root(), "list", params] as const,
+    list: (params: object) => [...qk.invoices.root(), "list", params] as const,
     detail: (id: string) => [...qk.invoices.root(), "detail", id] as const,
     pdf: (id: string) => [...qk.invoices.root(), "pdf", id] as const,
   },
@@ -31,7 +31,7 @@ export const qk = {
 
   audit: {
     root: () => [...qk.all, "audit"] as const,
-    list: (params: Record<string, unknown>) => [...qk.audit.root(), "list", params] as const,
+    list: (params: object) => [...qk.audit.root(), "list", params] as const,
   },
 
   accessRequests: {

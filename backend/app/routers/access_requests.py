@@ -205,7 +205,8 @@ async def approve_access_request(
     row.status = AccessRequestStatus.APPROVED
     row.handled_by_id = user.id
     row.handled_by_email = user.email
-    from datetime import UTC, datetime as _dt
+    from datetime import UTC
+    from datetime import datetime as _dt
 
     row.handled_at = _dt.now(UTC)
     await session.flush()
@@ -234,7 +235,8 @@ async def dismiss_access_request(
     row.status = AccessRequestStatus.DISMISSED
     row.handled_by_id = user.id
     row.handled_by_email = user.email
-    from datetime import UTC, datetime as _dt
+    from datetime import UTC
+    from datetime import datetime as _dt
 
     row.handled_at = _dt.now(UTC)
     await session.flush()

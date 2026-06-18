@@ -7,9 +7,6 @@ import "react-pdf/dist/Page/TextLayer.css";
 // node_modules. The bare `new URL("pdfjs-dist/...", import.meta.url)` pattern
 // does NOT work here: Vite treats it as relative to the importing file, not
 // as a bare module specifier.
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-expect-error — pdfjs-dist is a transitive dep and has no bundled types
-// for ?url imports
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import {
   MagnifyingGlassMinusIcon,
