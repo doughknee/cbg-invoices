@@ -128,7 +128,7 @@ class LogtoUser:
     last_sign_in_at: int | None
 
     @classmethod
-    def from_api(cls, raw: dict[str, Any]) -> "LogtoUser":
+    def from_api(cls, raw: dict[str, Any]) -> LogtoUser:
         return cls(
             id=raw["id"],
             primary_email=raw.get("primaryEmail"),
@@ -281,7 +281,7 @@ class LogtoRole:
     description: str | None
 
     @classmethod
-    def from_api(cls, raw: dict[str, Any]) -> "LogtoRole":
+    def from_api(cls, raw: dict[str, Any]) -> LogtoRole:
         return cls(
             id=raw["id"],
             name=(raw.get("name") or "").lower(),

@@ -7,7 +7,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 CodingField = Literal["job_number", "cost_code", "approver"]
 
 

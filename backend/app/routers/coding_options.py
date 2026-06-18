@@ -94,7 +94,7 @@ async def create_coding_option(
         raise HTTPException(
             status_code=409,
             detail=f"A {body.field} option with that value already exists",
-        )
+        ) from None
     await session.commit()
     return CodingOptionOut.model_validate(option)
 
@@ -128,7 +128,7 @@ async def patch_coding_option(
         raise HTTPException(
             status_code=409,
             detail=f"A {option.field} option with that value already exists",
-        )
+        ) from None
     await session.commit()
     return CodingOptionOut.model_validate(option)
 

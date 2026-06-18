@@ -20,7 +20,6 @@ from sqlalchemy.sql import func
 
 from app.db import Base
 
-
 # Allowed values for the `field` discriminator. Kept in sync with the
 # CHECK constraint defined in the Alembic migration.
 CODING_FIELD_VALUES: tuple[str, ...] = ("job_number", "cost_code", "approver")

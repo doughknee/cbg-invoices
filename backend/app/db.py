@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from datetime import datetime
-from uuid import UUID, uuid4
 
 from sqlalchemy import MetaData
 from sqlalchemy.ext.asyncio import (
@@ -11,8 +9,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.orm import DeclarativeBase, mapped_column, Mapped
-from sqlalchemy.sql import func
+from sqlalchemy.orm import DeclarativeBase
 
 from app.config import get_settings
 

@@ -27,7 +27,6 @@ from sqlalchemy.sql import func
 
 from app.db import Base
 
-
 # Lock down the ``source`` column to known values via a DB-level CHECK.
 SOURCE_VALUES: tuple[str, ...] = ("qbo_sync", "manual", "promoted_from_triage")
 

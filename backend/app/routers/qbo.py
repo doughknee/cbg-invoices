@@ -98,7 +98,7 @@ async def qbo_callback(
     session: Annotated[AsyncSession, Depends(get_session)],
     code: str | None = Query(None),
     state: str | None = Query(None),
-    realmId: str | None = Query(None),
+    realmId: str | None = Query(None),  # noqa: N803 — Intuit sends this exact param name
     error: str | None = Query(None),
 ):
     settings = get_settings()

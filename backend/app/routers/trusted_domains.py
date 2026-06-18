@@ -29,7 +29,8 @@ from app.schemas.trusted_domain import (
     TrustedDomainListResponse,
     TrustedDomainOut,
 )
-from app.services import audit, trusted_domains as svc
+from app.services import audit
+from app.services import trusted_domains as svc
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["trusted-domains"])
@@ -78,7 +79,7 @@ async def add_trusted_domain(
             notes=body.notes,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     await audit.record(
         session,
@@ -102,7 +103,7 @@ async def remove_trusted_domain(
         row = await svc.remove_manual(session, domain_id)
     except ValueError as exc:
         # qbo_sync rows refuse to be manually removed.
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Domain not found")
