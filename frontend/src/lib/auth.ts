@@ -22,6 +22,7 @@ export function useUser(): CurrentUser | null {
 
   useEffect(() => {
     if (!isAuthenticated) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear user when auth is lost
       setUser(null);
       return;
     }

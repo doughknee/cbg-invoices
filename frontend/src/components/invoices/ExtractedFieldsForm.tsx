@@ -124,6 +124,7 @@ export function ExtractedFieldsForm({ invoice, vendors, projects, onChange, onCo
   // Re-sync from server when the invoice id changes (new invoice opened)
   // and when status flips from extracting→ready_for_review (fresh extraction finished)
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the form when a new invoice loads
     setForm(fromInvoice(invoice));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoice.id, invoice.status]);

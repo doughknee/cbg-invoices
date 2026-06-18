@@ -217,6 +217,7 @@ export function StampPreviewOverlay({
   // ratio. Keeps the stamp legible at every size.
   const fontScale = useTransform(width, (w) => w / 220);
 
+  // eslint-disable-next-line react-hooks/refs -- portal target; the early-return guards null
   if (!containerSize || !containerRef.current) return null;
 
   // Drag constraints — keep the stamp inside the page bounds. Motion
@@ -275,6 +276,7 @@ export function StampPreviewOverlay({
     </motion.div>
   );
 
+  // eslint-disable-next-line react-hooks/refs -- createPortal needs the live container node
   return createPortal(overlay, containerRef.current);
 }
 

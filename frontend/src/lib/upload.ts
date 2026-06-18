@@ -6,7 +6,7 @@
  * UI polls the invoice detail endpoint to surface extraction status. Both
  * live inside the same state machine so the UploadCard can render one thing.
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLogto } from "@logto/react";
 import type { Invoice } from "@/types";
@@ -53,14 +53,12 @@ export function extractionMessageAt(elapsedSeconds: number): string {
 export function useUploadQueue() {
   const { getAccessToken } = useLogto();
   const qc = useQueryClient();
+  // `setTasks` from useState has a stable identity, so it's safe to call
+  // directly inside the async upload callbacks below — no ref needed.
   const [tasks, setTasks] = useState<UploadTask[]>([]);
-  // A ref-based updater so we can write from async callbacks without stale
-  // closures.
-  const setTasksRef = useRef(setTasks);
-  setTasksRef.current = setTasks;
 
   const updateTask = useCallback((id: string, stage: UploadStage) => {
-    setTasksRef.current((prev) =>
+    setTasks((prev) =>
       prev.map((t) => (t.id === id ? { ...t, stage } : t)),
     );
   }, []);
@@ -73,7 +71,7 @@ export function useUploadQueue() {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         stage: { kind: "uploading", percent: 0, file },
       }));
-      setTasksRef.current((prev) => [...prev, ...newTasks]);
+      setTasks((prev) => [...prev, ...newTasks]);
       // Kick off each in parallel
       for (const t of newTasks) {
         const file = (t.stage as Extract<UploadStage, { kind: "uploading" }>).file;
@@ -84,7 +82,7 @@ export function useUploadQueue() {
   );
 
   const dismiss = useCallback((id: string) => {
-    setTasksRef.current((prev) => prev.filter((t) => t.id !== id));
+    setTasks((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
   return { tasks, enqueue, dismiss };

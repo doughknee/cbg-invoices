@@ -23,10 +23,10 @@ export default tseslint.config(
       // TanStack Router route files export a `Route` alongside the component by
       // design; this HMR-only hint doesn't apply to them.
       "react-refresh/only-export-components": "off",
-      // Newer react-hooks (v6) rules flag patterns worth migrating, but they're
-      // surfaced as warnings so they don't block the build while we adopt them.
-      "react-hooks/set-state-in-effect": "warn",
-      "react-hooks/refs": "warn",
+      // Block on the react-hooks rules (set-state-in-effect / refs default to
+      // error in the recommended preset). The handful of intentional pre-existing
+      // cases carry inline eslint-disable comments explaining each one.
+      "react-hooks/exhaustive-deps": "error",
     },
   },
 );

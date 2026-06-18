@@ -28,6 +28,7 @@ export function RequestAccessModal({
   // Reset form when reopened
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset form fields when the sheet reopens
       setEmail("");
       setName("");
       setMessage("");
