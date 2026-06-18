@@ -1,7 +1,7 @@
 import { forwardRef, type SelectHTMLAttributes, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
-interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
+interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, "size"> {
   label?: string;
   error?: string;
   hint?: string;

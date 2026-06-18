@@ -24,7 +24,7 @@ export interface TeamMember {
   last_sign_in_at: number | null;
 }
 
-export interface MeInfo extends TeamMember {}
+export type MeInfo = TeamMember;
 
 interface UsersResponse {
   users: TeamMember[];
