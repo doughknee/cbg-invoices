@@ -93,3 +93,59 @@ async def test_require_admin_blocks_member(monkeypatch: pytest.MonkeyPatch) -> N
 
     assert exc_info.value.status_code == 403
     assert "admins and owners" in exc_info.value.detail.lower()
+
+
+# ---------- negative-amount guard ----------
+# `not total_cents` only catches missing/zero totals; a negative is truthy and
+# would otherwise post a negative bill to QBO.
+
+
+def test_ensure_amounts_nonnegative_allows_positive_and_none() -> None:
+    invoices._ensure_amounts_nonnegative(
+        SimpleNamespace(total_cents=1000, subtotal_cents=900, tax_cents=100)
+    )
+    invoices._ensure_amounts_nonnegative(
+        SimpleNamespace(total_cents=None, subtotal_cents=None, tax_cents=None)
+    )
+
+
+def test_ensure_amounts_nonnegative_rejects_negative_total() -> None:
+    inv = SimpleNamespace(total_cents=-500, subtotal_cents=None, tax_cents=None)
+
+    with pytest.raises(HTTPException) as exc_info:
+        invoices._ensure_amounts_nonnegative(inv)
+
+    assert exc_info.value.status_code == 400
+    assert "negative" in exc_info.value.detail.lower()
+    assert "total" in exc_info.value.detail.lower()
+
+
+def test_ensure_amounts_nonnegative_rejects_negative_subtotal_and_tax() -> None:
+    inv = SimpleNamespace(total_cents=100, subtotal_cents=-1, tax_cents=-2)
+
+    with pytest.raises(HTTPException) as exc_info:
+        invoices._ensure_amounts_nonnegative(inv)
+
+    assert exc_info.value.status_code == 400
+    assert "subtotal" in exc_info.value.detail.lower()
+    assert "tax" in exc_info.value.detail.lower()
+
+
+def test_ensure_approvable_rejects_negative_total() -> None:
+    # vendor + total set so we reach the negative check rather than the
+    # missing-field checks; a negative total is truthy so it slips past
+    # `not total_cents`.
+    inv = SimpleNamespace(
+        status=invoices.InvoiceStatus.READY_FOR_REVIEW,
+        vendor_name="Acme",
+        vendor_id=None,
+        total_cents=-500,
+        subtotal_cents=None,
+        tax_cents=None,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        invoices._ensure_approvable(inv)
+
+    assert exc_info.value.status_code == 400
+    assert "negative" in exc_info.value.detail.lower()
