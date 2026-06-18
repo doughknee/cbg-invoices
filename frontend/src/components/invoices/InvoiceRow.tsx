@@ -108,6 +108,7 @@ function QuickAction({ invoice }: { invoice: Invoice }) {
   // Reset if the invoice shows an error — so the user can click again and see
   // the real retry state from a clean slate.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clear the optimistic flag when a post error appears
     if (didPost && invoice.qbo_post_error) setDidPost(false);
   }, [invoice.qbo_post_error, didPost]);
 

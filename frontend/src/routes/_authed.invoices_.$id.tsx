@@ -122,6 +122,7 @@ function InvoiceDetailPage() {
   // Sync from the invoice when it loads / refreshes
   useEffect(() => {
     if (invoiceQuery.data?.stamp_position) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync stamp position from the loaded invoice
       setStampPosition(invoiceQuery.data.stamp_position);
     }
   }, [invoiceQuery.data?.stamp_position]);
@@ -183,8 +184,10 @@ function InvoiceDetailPage() {
       burstPoll &&
       (invoice.status !== "approved" || invoice.qbo_post_error)
     ) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- stop the burst poll once the post resolves
       setBurstPoll(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on specific fields, not the whole invoice object
   }, [invoice?.status, invoice?.qbo_post_error, burstPoll]);
 
   // True while a QBO post is in flight — the POST returned quickly but the

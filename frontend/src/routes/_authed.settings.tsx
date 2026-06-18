@@ -67,6 +67,7 @@ function SettingsPage() {
 
   useEffect(() => {
     if (search.qbo_connected) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- surface the QBO redirect result as a banner
       setBanner({ kind: "ok", text: "Connected to QuickBooks Online." });
     } else if (search.qbo_error) {
       setBanner({ kind: "err", text: `QBO connection failed: ${search.qbo_error}` });
@@ -611,8 +612,8 @@ function TrustedDomainsSection() {
   const [draftNotes, setDraftNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const domains = query.data?.domains ?? [];
   const grouped = useMemo(() => {
+    const domains = query.data?.domains ?? [];
     const buckets: Record<TrustedDomain["source"], TrustedDomain[]> = {
       qbo_sync: [],
       manual: [],
@@ -620,7 +621,7 @@ function TrustedDomainsSection() {
     };
     for (const d of domains) buckets[d.source].push(d);
     return buckets;
-  }, [domains]);
+  }, [query.data?.domains]);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -50,6 +50,7 @@ function InvitePage() {
     if (isLoading) return;
 
     if (!token || !email) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- show the missing-params error after Logto resolves
       setError(
         "This invite link is missing its token or email. Ask whoever invited you to send a fresh link.",
       );
