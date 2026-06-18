@@ -295,13 +295,17 @@ async def patch_invoice(
 # approve, unapprove, or post to QBO.
 
 
-async def _require_assignment_manager(user: CurrentUser) -> None:
+async def _require_admin(user: CurrentUser, *, action: str) -> None:
     role = await logto_admin.user_app_role(user.id) or "member"
     if role not in {"owner", "admin"}:
         raise HTTPException(
             status_code=403,
-            detail="Only admins and owners can assign invoices",
+            detail=f"Only admins and owners can {action}",
         )
+
+
+async def _require_assignment_manager(user: CurrentUser) -> None:
+    await _require_admin(user, action="assign invoices")
 
 
 def _ensure_review_assignee(invoice: Invoice, user: CurrentUser, *, action: str) -> None:
@@ -316,6 +320,22 @@ def _ensure_review_assignee(invoice: Invoice, user: CurrentUser, *, action: str)
             detail=(
                 f"Only the assigned user can {action}. "
                 "Reassign the invoice if someone else needs to handle it."
+            ),
+        )
+
+
+def _ensure_can_reject(invoice: Invoice, user: CurrentUser) -> None:
+    """Reject stays open on *unassigned* invoices (e.g. triaging junk mail),
+    but once an invoice is assigned to someone, only that assignee may reject
+    it — the same guard the other review actions enforce. An admin who needs
+    to take it over reassigns it first.
+    """
+    if invoice.assigned_to_id and invoice.assigned_to_id != user.id:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "This invoice is assigned to someone else. "
+                "Reassign it before you can reject it."
             ),
         )
 
@@ -569,6 +589,7 @@ async def reject_invoice(
         raise HTTPException(status_code=404, detail="Invoice not found")
     if invoice.status == InvoiceStatus.POSTED_TO_QBO:
         raise HTTPException(status_code=409, detail="Cannot reject invoice already posted to QBO")
+    _ensure_can_reject(invoice, user)
 
     invoice.status = InvoiceStatus.REJECTED
     invoice.reviewed_by = user.id
@@ -669,7 +690,12 @@ async def trust_sender_and_promote(
     then routes the row to READY_FOR_REVIEW. If the row isn't in
     NEEDS_TRIAGE we still trust the domain (no harm, idempotent) but
     we don't change the status.
+
+    Admin/owner only: trusting a domain auto-promotes *all* future mail
+    from that domain, so it's a higher-trust action than promoting a
+    single invoice (which any member can do via /promote).
     """
+    await _require_admin(user, action="trust a sender domain")
     invoice = await session.get(Invoice, invoice_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")

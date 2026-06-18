@@ -56,3 +56,7 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# Put the project root on sys.path so `pytest` (not just `python -m pytest`)
+# can import the `app` package. The Dockerfile installs deps before the
+# source is copied, so the editable install doesn't register `app` on its own.
+pythonpath = ["."]

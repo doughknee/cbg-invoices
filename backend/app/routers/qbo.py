@@ -2,20 +2,51 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db import get_session
 from app.deps import CurrentUser, get_current_user
+from app.models.audit_log import AuditLog
 from app.schemas.qbo import QboAuthUrl, QboSettingsPatch, QboStatus
 from app.services import audit, qbo_client, qbo_sync
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["qbo"])
+
+# How long an OAuth `state` stays valid between /connect and /callback. The
+# round-trip through Intuit's consent screen is normally seconds; 30 minutes
+# is a generous ceiling that still bounds the CSRF replay window.
+OAUTH_STATE_TTL = timedelta(minutes=30)
+
+
+async def _oauth_state_is_valid(session: AsyncSession, state: str | None) -> bool:
+    """Confirm the callback's ``state`` matches one we recently issued.
+
+    ``qbo_connect`` records every generated state as a ``qbo_oauth_initiated``
+    audit entry. Requiring a recent match here defeats CSRF: an attacker can't
+    forge a callback that connects the app to *their* QBO company without a
+    valid, unguessable, recently-issued state.
+    """
+    if not state:
+        return False
+    cutoff = datetime.now(UTC) - OAUTH_STATE_TTL
+    stmt = (
+        select(AuditLog.id)
+        .where(
+            AuditLog.action == "qbo_oauth_initiated",
+            AuditLog.message == state,
+            AuditLog.created_at >= cutoff,
+        )
+        .limit(1)
+    )
+    return (await session.execute(stmt)).first() is not None
 
 
 @router.get("/status", response_model=QboStatus)
@@ -78,6 +109,9 @@ async def qbo_callback(
         return RedirectResponse(url=f"{target}?qbo_error={error}", status_code=302)
     if not code or not realmId:
         return RedirectResponse(url=f"{target}?qbo_error=missing_params", status_code=302)
+    if not await _oauth_state_is_valid(session, state):
+        log.warning("QBO OAuth callback rejected: invalid or expired state")
+        return RedirectResponse(url=f"{target}?qbo_error=invalid_state", status_code=302)
 
     try:
         payload = await qbo_client.exchange_code_for_token(code, realmId)
@@ -170,9 +204,9 @@ async def sync_vendors(
     try:
         count = await qbo_sync.sync_vendors(session)
     except qbo_client.QboNotConnectedError:
-        raise HTTPException(status_code=400, detail="QBO is not connected")
+        raise HTTPException(status_code=400, detail="QBO is not connected") from None
     except qbo_client.QboApiError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     await audit.record(
         session,
@@ -193,9 +227,9 @@ async def sync_projects(
     try:
         count = await qbo_sync.sync_projects(session)
     except qbo_client.QboNotConnectedError:
-        raise HTTPException(status_code=400, detail="QBO is not connected")
+        raise HTTPException(status_code=400, detail="QBO is not connected") from None
     except qbo_client.QboApiError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     await audit.record(
         session,
@@ -217,9 +251,9 @@ async def list_expense_accounts(
     try:
         accounts = await qbo_client.fetch_expense_accounts(session)
     except qbo_client.QboNotConnectedError:
-        raise HTTPException(status_code=400, detail="QBO is not connected")
+        raise HTTPException(status_code=400, detail="QBO is not connected") from None
     except qbo_client.QboApiError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {
         "accounts": [
             {
