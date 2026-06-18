@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { LogtoProvider, type LogtoConfig } from "@logto/react";
 
 import { routeTree } from "./routeTree.gen";
+import { RootErrorBoundary, RouteErrorComponent } from "@/components/ErrorBoundary";
 import "@/assets/css/main.css";
 
 const logtoConfig: LogtoConfig = {
@@ -26,6 +27,7 @@ const queryClient = new QueryClient({
 const router = createRouter({
   routeTree,
   defaultPreload: "intent",
+  defaultErrorComponent: RouteErrorComponent,
   context: { queryClient },
 });
 
@@ -40,10 +42,12 @@ if (!rootEl) throw new Error("#root not found");
 
 createRoot(rootEl).render(
   <StrictMode>
-    <LogtoProvider config={logtoConfig}>
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>
-    </LogtoProvider>
+    <RootErrorBoundary>
+      <LogtoProvider config={logtoConfig}>
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </LogtoProvider>
+    </RootErrorBoundary>
   </StrictMode>,
 );

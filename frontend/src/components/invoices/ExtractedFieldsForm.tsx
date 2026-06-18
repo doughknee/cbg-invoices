@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
 import type { Invoice, LineItem, Project, Vendor } from "@/types";
 import { Input } from "@/components/ui/Input";
-import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { Combobox } from "@/components/ui/Combobox";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
@@ -204,6 +203,15 @@ export function ExtractedFieldsForm({ invoice, vendors, projects, onChange, onCo
     totalCents !== null &&
     Math.abs(subtotalCents + taxCents - totalCents) > 1;
 
+  // Field-level validation. Negative money is invalid — and the backend's
+  // approve check only guards a *missing* total, so a negative would otherwise
+  // slip straight through to QBO. Date inversion is a softer (allowed) warning.
+  const subtotalNegative = subtotalCents !== null && subtotalCents < 0;
+  const taxNegative = taxCents !== null && taxCents < 0;
+  const totalNegative = totalCents !== null && totalCents < 0;
+  const dueBeforeInvoice =
+    !!form.invoice_date && !!form.due_date && form.due_date < form.invoice_date;
+
   return (
     <div className="space-y-4">
       {/* ---------- Summary card ---------- */}
@@ -352,6 +360,11 @@ export function ExtractedFieldsForm({ invoice, vendors, projects, onChange, onCo
               onChange={(e) => update("due_date", e.target.value)}
             />
           </div>
+          {dueBeforeInvoice && (
+            <p className="mt-2 text-xs text-amber-700 bg-amber/10 border-l-2 border-amber px-2 py-1">
+              Due date is before the invoice date. Double-check the dates.
+            </p>
+          )}
         </FormSection>
 
         {/* ---------- Amounts ---------- */}
@@ -365,6 +378,7 @@ export function ExtractedFieldsForm({ invoice, vendors, projects, onChange, onCo
               onChange={(e) => update("subtotal", e.target.value)}
               placeholder="0.00"
               className="tabular-nums text-right"
+              error={subtotalNegative ? "Can't be negative" : undefined}
             />
             <Input
               label="Tax"
@@ -374,6 +388,7 @@ export function ExtractedFieldsForm({ invoice, vendors, projects, onChange, onCo
               onChange={(e) => update("tax", e.target.value)}
               placeholder="0.00"
               className="tabular-nums text-right"
+              error={taxNegative ? "Can't be negative" : undefined}
             />
             <Input
               label="Total"
@@ -383,6 +398,7 @@ export function ExtractedFieldsForm({ invoice, vendors, projects, onChange, onCo
               onChange={(e) => update("total", e.target.value)}
               placeholder="0.00"
               className="tabular-nums text-right font-semibold text-navy"
+              error={totalNegative ? "Can't be negative" : undefined}
             />
           </div>
           {mathIsOff && (
@@ -453,7 +469,10 @@ export function ExtractedFieldsForm({ invoice, vendors, projects, onChange, onCo
                         placeholder="0.00"
                         inputMode="decimal"
                         onChange={(e) => updateLine(idx, "amount", e.target.value)}
-                        className="block w-full px-2 py-2 text-sm bg-transparent border-0 focus:outline-none focus:bg-amber/10 text-right tabular-nums font-medium placeholder:text-slate-300 pr-7"
+                        aria-invalid={(parseDollars(li.amount) ?? 0) < 0}
+                        className={`block w-full px-2 py-2 text-sm bg-transparent border-0 focus:outline-none focus:bg-amber/10 text-right tabular-nums font-medium placeholder:text-slate-300 pr-7 ${
+                          (parseDollars(li.amount) ?? 0) < 0 ? "text-red-700" : ""
+                        }`}
                       />
                       <button
                         type="button"
