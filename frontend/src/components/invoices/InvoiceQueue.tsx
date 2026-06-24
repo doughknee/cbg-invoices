@@ -158,7 +158,11 @@ export function InvoiceQueue() {
         onChange={onFileChange}
       />
 
-      <PageHeader title="Invoices" actions={uploadButton} />
+      <PageHeader
+        title="Invoices"
+        subtitle="Your invoice inbox — review, approve, and post approved bills to QuickBooks."
+        actions={uploadButton}
+      />
 
       <AnimatePresence>
         {tasks.length > 0 && (
