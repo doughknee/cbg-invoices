@@ -1,9 +1,11 @@
 import { useCallback, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowUpTrayIcon, InboxIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { PageHeader } from "@/components/layout/AppShell";
 import { useMobileAppBar } from "@/components/layout/MobileAppBar";
 import { useMe } from "@/lib/users";
+import { defaultInvoiceView, type InvoiceView } from "@/lib/invoiceViews";
 import { useInvoices, type ListParams } from "@/lib/invoices";
 import { useQboStatus } from "@/lib/qbo";
 import { useUploadQueue } from "@/lib/upload";
@@ -25,7 +27,7 @@ import { FilterChips } from "@/components/ui/FilterChips";
  */
 const ACTIVE: InvoiceStatus[] = ["ready_for_review", "extraction_failed", "received", "extracting"];
 
-type PillKey = "needs_review" | "mine" | "ready_to_post" | "triage" | "all";
+type PillKey = InvoiceView;
 
 interface Pill {
   key: PillKey;
@@ -63,11 +65,14 @@ export function InvoiceQueue() {
   const isAdmin = me.data?.role === "owner" || me.data?.role === "admin";
   const qbo = useQboStatus();
   const qboConnected = qbo.data?.connected ?? false;
-  // Members land on their own work; admins on the unassigned review pile.
-  // Null until the user picks a pill, so the role-based default can apply once
-  // we know who they are without overriding a manual choice.
-  const [active, setActive] = useState<PillKey | null>(null);
-  const activePill: PillKey = active ?? (me.data && !isAdmin ? "mine" : "needs_review");
+  // The active filter lives in the URL (?view=) so the sidebar jump-nav and
+  // the pills share one source of truth. Defaults by role when unset.
+  const search = useSearch({ from: "/_authed/invoices" });
+  const navigate = useNavigate();
+  const activePill: PillKey = search.view ?? defaultInvoiceView(isAdmin);
+  function setActive(view: PillKey) {
+    void navigate({ to: "/invoices", search: { view } });
+  }
   const [q, setQ] = useState("");
   const [rejecting, setRejecting] = useState<Invoice | null>(null);
 
