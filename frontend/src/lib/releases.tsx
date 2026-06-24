@@ -14,6 +14,7 @@ import {
   Cog6ToothIcon,
   DocumentTextIcon,
   InboxIcon,
+  SparklesIcon,
 } from "@heroicons/react/24/outline";
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -41,6 +42,25 @@ export interface Release {
 }
 
 export const RELEASES: Release[] = [
+  {
+    version: "0.2.1",
+    date: "June 24, 2026",
+    headline: "See what's new, right in the app",
+    summary:
+      "A small follow-up to the big one: every update now lives in the app, in plain English.",
+    sections: [
+      {
+        kind: "new",
+        items: [
+          {
+            Icon: SparklesIcon,
+            title: "A “What's new” page",
+            body: "You're reading it. Find it any time from the sidebar (or the More menu on mobile) — each release explained in plain language, so you can see what changed and what you can do now.",
+          },
+        ],
+      },
+    ],
+  },
   {
     version: "0.2.0",
     date: "June 24, 2026",
