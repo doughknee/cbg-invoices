@@ -1,4 +1,5 @@
 import { Link, useLocation } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { useLogto } from "@logto/react";
 import {
   DocumentTextIcon,
@@ -12,6 +13,8 @@ import { cn } from "@/lib/cn";
 import { postSignOutUri, useUser } from "@/lib/auth";
 import { useMe } from "@/lib/users";
 import { useAccessRequests } from "@/lib/accessRequests";
+import { useQboStatus } from "@/lib/qbo";
+import { SETTINGS_SECTIONS } from "@/lib/settingsSections";
 
 interface NavItem {
   to: string;
@@ -22,7 +25,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: "/invoices", label: "Invoices", Icon: DocumentTextIcon },
   { to: "/team", label: "Team", Icon: UsersIcon },
-  { to: "/audit", label: "Audit log", Icon: ClockIcon },
+  { to: "/audit", label: "Activity", Icon: ClockIcon },
   { to: "/settings", label: "Settings", Icon: Cog6ToothIcon },
 ];
 
@@ -37,6 +40,39 @@ export function Sidebar() {
   // Only admins+ get the access-requests query (others would 403)
   const reqQuery = useAccessRequests({ enabled: canManage });
   const pendingCount = reqQuery.data?.pending_count ?? 0;
+
+  // While on Settings, expand a jump-nav of the page's sections. The "sync"
+  // section only exists once QuickBooks is connected.
+  const onSettings = pathname.startsWith("/settings");
+  const qboConnected = useQboStatus().data?.connected ?? false;
+  const settingsSections = SETTINGS_SECTIONS.filter((s) => !s.requiresQbo || qboConnected);
+  const [activeSection, setActiveSection] = useState("");
+
+  useEffect(() => {
+    if (!onSettings) return;
+    const els = SETTINGS_SECTIONS.map((s) => document.getElementById(s.id)).filter(
+      (el): el is HTMLElement => el !== null,
+    );
+    if (els.length === 0) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const top = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+        if (top) setActiveSection(top.target.id);
+      },
+      { rootMargin: "-10% 0px -70% 0px" },
+    );
+    els.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [onSettings, qboConnected]);
+
+  function jumpToSection(id: string) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    setActiveSection(id);
+  }
 
   return (
     <aside
@@ -83,6 +119,27 @@ export function Sidebar() {
                       </span>
                     )}
                   </Link>
+
+                  {to === "/settings" && active && settingsSections.length > 0 && (
+                    <ul className="mt-0.5 mb-1">
+                      {settingsSections.map((s) => (
+                        <li key={s.id}>
+                          <button
+                            type="button"
+                            onClick={() => jumpToSection(s.id)}
+                            className={cn(
+                              "w-full text-left pl-14 pr-6 py-1.5 text-xs transition-colors border-l-2",
+                              activeSection === s.id
+                                ? "border-amber text-stone"
+                                : "border-transparent text-slate-500 hover:text-stone hover:bg-white/5",
+                            )}
+                          >
+                            {s.label}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               );
             })}

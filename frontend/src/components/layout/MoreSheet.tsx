@@ -31,9 +31,9 @@ interface MoreLink {
 const MORE_LINKS: MoreLink[] = [
   {
     to: "/audit",
-    label: "Audit log",
+    label: "Activity",
     Icon: ClockIcon,
-    description: "Every change, by every user, time-stamped.",
+    description: "A plain-English log of every action, time-stamped.",
   },
   {
     to: "/settings",

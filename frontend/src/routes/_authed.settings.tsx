@@ -3,8 +3,12 @@ import { useEffect, useMemo, useState } from "react";
 import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/solid";
 import {
   ArrowPathIcon,
+  BellIcon,
+  LinkIcon,
   PencilIcon,
   PlusIcon,
+  ShieldCheckIcon,
+  TagIcon,
   TrashIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
@@ -105,11 +109,14 @@ function SettingsPage() {
 
       <div className="space-y-6">
         {/* QBO Connection */}
-        <Card accent="top">
+        <Card accent="top" id="quickbooks" className="scroll-mt-6">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="font-display text-2xl text-navy">QuickBooks Online</h2>
+                <h2 className="font-display text-2xl text-navy flex items-center gap-2">
+                  <LinkIcon className="h-5 w-5 text-amber" aria-hidden />
+                  QuickBooks Online
+                </h2>
                 <p className="text-xs text-slate-500 mt-1">
                   Post approved bills and sync vendors + projects.
                 </p>
@@ -213,9 +220,15 @@ function SettingsPage() {
 
         {/* Sync settings */}
         {connected && (
-          <Card accent="left">
+          <Card accent="left" id="sync" className="scroll-mt-6">
             <CardHeader>
-              <h2 className="font-display text-2xl text-navy">Sync settings</h2>
+              <h2 className="font-display text-2xl text-navy flex items-center gap-2">
+                <ArrowPathIcon className="h-5 w-5 text-amber" aria-hidden />
+                Sync settings
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">
+                How projects and expense accounts map when posting to QuickBooks.
+              </p>
             </CardHeader>
             <CardBody>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -334,9 +347,12 @@ function NotificationsSection() {
   }
 
   return (
-    <Card accent="left">
+    <Card accent="left" id="notifications" className="scroll-mt-6">
       <CardHeader>
-        <h2 className="font-display text-2xl text-navy">Notifications</h2>
+        <h2 className="font-display text-2xl text-navy flex items-center gap-2">
+          <BellIcon className="h-5 w-5 text-amber" aria-hidden />
+          Notifications
+        </h2>
         <p className="text-xs text-slate-500 mt-1">
           A daily email reminds each reviewer of the ready-for-review invoices
           assigned to them.
@@ -445,9 +461,12 @@ function APCodingSection() {
   );
 
   return (
-    <Card accent="left">
+    <Card accent="left" id="coding" className="scroll-mt-6">
       <CardHeader>
-        <h2 className="font-display text-2xl text-navy">AP coding options</h2>
+        <h2 className="font-display text-2xl text-navy flex items-center gap-2">
+          <TagIcon className="h-5 w-5 text-amber" aria-hidden />
+          AP coding options
+        </h2>
         <p className="text-xs text-slate-500 mt-1">
           Curated dropdowns shown when reviewing invoices. PMs can still
           enter custom values, but pre-defined options reduce typos and
@@ -814,9 +833,10 @@ function TrustedDomainsSection() {
   };
 
   return (
-    <Card accent="left">
+    <Card accent="left" id="domains" className="scroll-mt-6">
       <CardHeader>
-        <h2 className="font-display text-2xl text-navy">
+        <h2 className="font-display text-2xl text-navy flex items-center gap-2">
+          <ShieldCheckIcon className="h-5 w-5 text-amber" aria-hidden />
           Trusted email domains
         </h2>
         <p className="text-xs text-slate-500 mt-1">
