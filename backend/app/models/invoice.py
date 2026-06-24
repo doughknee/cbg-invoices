@@ -157,11 +157,15 @@ class Invoice(Base):
     qbo_posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     qbo_post_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Assignment (visibility only — anyone can still act on the invoice)
+    # Assignment + claim. Admins/owners can review any invoice; members act
+    # only on invoices assigned to them. ``claimed_at`` is set when the
+    # assignee opens it via "Claim & review" — a signal to admins that
+    # they've taken ownership. Reset whenever the assignee changes.
     assigned_to_id: Mapped[str | None] = mapped_column(String(256), nullable=True, index=True)
     assigned_to_email: Mapped[str | None] = mapped_column(String(256), nullable=True)
     assigned_to_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     assigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Per-invoice override for where the AP stamp gets placed on page 1
     # of the QBO attachment. NULL = use the default (top-right, 24pt

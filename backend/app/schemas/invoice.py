@@ -103,6 +103,7 @@ class _InvoiceBase(BaseModel):
     assigned_to_email: str | None = None
     assigned_to_name: str | None = None
     assigned_at: datetime | None = None
+    claimed_at: datetime | None = None
 
     stamp_position: dict | None = None
 

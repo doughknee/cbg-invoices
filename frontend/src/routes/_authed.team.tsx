@@ -23,10 +23,14 @@ import {
 } from "@heroicons/react/24/outline";
 import { PageHeader } from "@/components/layout/AppShell";
 import { useMobileAppBar } from "@/components/layout/MobileAppBar";
+import { Badge } from "@/components/ui/Badge";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
+import { LoadingState } from "@/components/ui/LoadingState";
 import { Select } from "@/components/ui/Select";
 import {
   memberInitials,
@@ -62,7 +66,7 @@ interface InviteResult {
 function TeamPage() {
   const meQuery = useMe();
   const me = meQuery.data ?? null;
-  const { data, isLoading, error } = useUsers();
+  const { data, isLoading, error, refetch } = useUsers();
   const invite = useInviteUser();
   const remove = useRemoveUser();
   const changeRole = useChangeRole();
@@ -176,24 +180,21 @@ function TeamPage() {
         </div>
       )}
 
-      <div className="bg-white border-t-4 border-amber">
-        {isLoading && (
-          <div className="px-6 py-10 text-center text-sm text-slate-500">
-            Loading team…
-          </div>
-        )}
-        {error && (
-          <div className="px-6 py-10 text-sm text-red-700">
-            Failed to load team: {(error as Error).message}
-            {(error as Error).message.includes("not configured") && (
-              <div className="text-xs text-slate-500 mt-2">
-                Set <code>LOGTO_M2M_APP_ID</code> / <code>LOGTO_M2M_APP_SECRET</code> in
-                the backend environment, then <code>make restart</code>.
-              </div>
-            )}
-          </div>
-        )}
-        {!isLoading && !error && (data?.users.length ?? 0) === 0 && (
+      <Card accent="top">
+        {isLoading ? (
+          <LoadingState message="Loading team…" />
+        ) : error ? (
+          <ErrorState
+            title="Couldn't load the team"
+            message={
+              (error as Error).message +
+              ((error as Error).message.includes("not configured")
+                ? " — set LOGTO_M2M_APP_ID / LOGTO_M2M_APP_SECRET in the backend env, then restart."
+                : "")
+            }
+            onRetry={() => void refetch()}
+          />
+        ) : (data?.users.length ?? 0) === 0 ? (
           <EmptyState
             Icon={UsersIcon}
             title="No team members yet"
@@ -204,19 +205,14 @@ function TeamPage() {
             }
             cta={
               canManage ? (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => setInviteOpen(true)}
-                >
+                <Button variant="primary" size="sm" onClick={() => setInviteOpen(true)}>
                   <UserPlusIcon className="h-4 w-4" />
                   Invite member
                 </Button>
               ) : undefined
             }
           />
-        )}
-        {!isLoading && !error && (data?.users.length ?? 0) > 0 && (
+        ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px]">
               <thead className="bg-stone/50">
@@ -247,7 +243,7 @@ function TeamPage() {
             </table>
           </div>
         )}
-      </div>
+      </Card>
 
       <InviteModal
         open={inviteOpen}
@@ -429,19 +425,10 @@ function RoleSelect({
 }
 
 function RoleStaticBadge({ role }: { role: AppRole | null }) {
-  const cfg: Record<AppRole, { label: string; cls: string }> = {
-    owner: { label: "Owner", cls: "bg-amber/20 text-navy border-amber" },
-    admin: { label: "Admin", cls: "bg-navy text-stone border-navy" },
-    member: { label: "Member", cls: "bg-slate-100 text-slate-700 border-slate-300" },
-  };
   const key = role ?? "member";
-  return (
-    <span
-      className={`inline-block text-[10px] font-bold uppercase tracking-widest px-2 py-1 border ${cfg[key].cls}`}
-    >
-      {cfg[key].label}
-    </span>
-  );
+  const tone = key === "owner" ? "amber" : key === "admin" ? "navy" : "slate";
+  const label = key.charAt(0).toUpperCase() + key.slice(1);
+  return <Badge tone={tone}>{label}</Badge>;
 }
 
 function formatEpochMs(ms: number | null): string {

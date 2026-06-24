@@ -11,63 +11,100 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./test.db")
 from app.routers import invoices
 
 
-def test_ensure_review_assignee_allows_assigned_user() -> None:
-    invoice = SimpleNamespace(assigned_to_id="user-1")
-    user = SimpleNamespace(id="user-1")
+def _patch_role(monkeypatch: pytest.MonkeyPatch, role: str) -> None:
+    async def fake_role(_user_id: str) -> str:
+        return role
 
-    invoices._ensure_review_assignee(invoice, user, action="approve")
+    monkeypatch.setattr(invoices.logto_admin, "user_app_role", fake_role)
 
 
-def test_ensure_review_assignee_rejects_unassigned_invoice() -> None:
-    invoice = SimpleNamespace(assigned_to_id=None)
-    user = SimpleNamespace(id="user-1")
+# ---------- review guard (approve / post / unapprove) ----------
+# Admins/owners act on any invoice; members only on invoices assigned to them.
 
+
+@pytest.mark.asyncio
+async def test_ensure_can_review_admin_allows_any(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_role(monkeypatch, "admin")
+    admin = SimpleNamespace(id="admin-1")
+    # Unassigned, and assigned-to-someone-else — both fine for an admin.
+    await invoices._ensure_can_review(
+        SimpleNamespace(assigned_to_id=None), admin, action="approve"
+    )
+    await invoices._ensure_can_review(
+        SimpleNamespace(assigned_to_id="user-2"), admin, action="approve"
+    )
+
+
+@pytest.mark.asyncio
+async def test_ensure_can_review_member_allows_own(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_role(monkeypatch, "member")
+    await invoices._ensure_can_review(
+        SimpleNamespace(assigned_to_id="user-1"), SimpleNamespace(id="user-1"), action="approve"
+    )
+
+
+@pytest.mark.asyncio
+async def test_ensure_can_review_member_blocks_unassigned(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_role(monkeypatch, "member")
     with pytest.raises(HTTPException) as exc_info:
-        invoices._ensure_review_assignee(invoice, user, action="approve")
-
-    assert exc_info.value.status_code == 409
-    assert "must be assigned" in exc_info.value.detail.lower()
-
-
-def test_ensure_review_assignee_rejects_non_assignee() -> None:
-    invoice = SimpleNamespace(assigned_to_id="user-2")
-    user = SimpleNamespace(id="user-1")
-
-    with pytest.raises(HTTPException) as exc_info:
-        invoices._ensure_review_assignee(invoice, user, action="post to qbo")
-
+        await invoices._ensure_can_review(
+            SimpleNamespace(assigned_to_id=None), SimpleNamespace(id="user-1"), action="approve"
+        )
     assert exc_info.value.status_code == 403
     assert "assigned user" in exc_info.value.detail.lower()
 
 
-# ---------- reject guard ----------
-# Reject stays open on unassigned invoices (triaging junk) but is locked to
-# the assignee once someone owns the invoice.
-
-
-def test_ensure_can_reject_allows_unassigned_invoice() -> None:
-    invoice = SimpleNamespace(assigned_to_id=None)
-    user = SimpleNamespace(id="user-1")
-
-    invoices._ensure_can_reject(invoice, user)  # should not raise
-
-
-def test_ensure_can_reject_allows_own_assignment() -> None:
-    invoice = SimpleNamespace(assigned_to_id="user-1")
-    user = SimpleNamespace(id="user-1")
-
-    invoices._ensure_can_reject(invoice, user)  # should not raise
-
-
-def test_ensure_can_reject_blocks_other_users_assignment() -> None:
-    invoice = SimpleNamespace(assigned_to_id="user-2")
-    user = SimpleNamespace(id="user-1")
-
+@pytest.mark.asyncio
+async def test_ensure_can_review_member_blocks_other(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_role(monkeypatch, "member")
     with pytest.raises(HTTPException) as exc_info:
-        invoices._ensure_can_reject(invoice, user)
-
+        await invoices._ensure_can_review(
+            SimpleNamespace(assigned_to_id="user-2"),
+            SimpleNamespace(id="user-1"),
+            action="post to qbo",
+        )
     assert exc_info.value.status_code == 403
-    assert "assigned to someone else" in exc_info.value.detail.lower()
+
+
+# ---------- reject guard ----------
+# Admins reject anything; members only their own assigned invoices (so triage,
+# which is unassigned, is an admin responsibility).
+
+
+@pytest.mark.asyncio
+async def test_ensure_can_reject_admin_allows_any(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_role(monkeypatch, "owner")
+    await invoices._ensure_can_reject(
+        SimpleNamespace(assigned_to_id=None), SimpleNamespace(id="admin-1")
+    )
+
+
+@pytest.mark.asyncio
+async def test_ensure_can_reject_member_allows_own(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_role(monkeypatch, "member")
+    await invoices._ensure_can_reject(
+        SimpleNamespace(assigned_to_id="user-1"), SimpleNamespace(id="user-1")
+    )
+
+
+@pytest.mark.asyncio
+async def test_ensure_can_reject_member_blocks_unassigned(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_role(monkeypatch, "member")
+    with pytest.raises(HTTPException) as exc_info:
+        await invoices._ensure_can_reject(
+            SimpleNamespace(assigned_to_id=None), SimpleNamespace(id="user-1")
+        )
+    assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_ensure_can_reject_member_blocks_other(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_role(monkeypatch, "member")
+    with pytest.raises(HTTPException) as exc_info:
+        await invoices._ensure_can_reject(
+            SimpleNamespace(assigned_to_id="user-2"), SimpleNamespace(id="user-1")
+        )
+    assert exc_info.value.status_code == 403
 
 
 # ---------- admin gate ----------

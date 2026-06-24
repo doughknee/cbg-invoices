@@ -76,6 +76,7 @@ export interface Invoice {
   assigned_to_email: string | null;
   assigned_to_name: string | null;
   assigned_at: string | null;
+  claimed_at: string | null;
 
   /** Per-invoice override for where the AP stamp lands on the QBO
    *  attachment. All values are fractions of the page (top-anchored).
@@ -152,6 +153,8 @@ export interface AuditLogEntry {
   actor_id: string;
   actor_email: string | null;
   invoice_id: string | null;
+  invoice_vendor_name: string | null;
+  invoice_number: string | null;
   action: string;
   before: Record<string, unknown> | null;
   after: Record<string, unknown> | null;

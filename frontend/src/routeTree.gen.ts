@@ -9,28 +9,27 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as InviteRouteImport } from './routes/invite'
-import { Route as CallbackRouteImport } from './routes/callback'
-import { Route as EulaRouteImport } from './routes/eula'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as InviteRouteImport } from './routes/invite'
+import { Route as EulaRouteImport } from './routes/eula'
+import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthedVendorsRouteImport } from './routes/_authed.vendors'
 import { Route as AuthedTeamRouteImport } from './routes/_authed.team'
 import { Route as AuthedSettingsRouteImport } from './routes/_authed.settings'
-import { Route as AuthedProjectsRouteImport } from './routes/_authed.projects'
+import { Route as AuthedQuickbooksRouteImport } from './routes/_authed.quickbooks'
 import { Route as AuthedInvoicesRouteImport } from './routes/_authed.invoices'
 import { Route as AuthedAuditRouteImport } from './routes/_authed.audit'
 import { Route as AuthedInvoicesIdRouteImport } from './routes/_authed.invoices_.$id'
 
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InviteRoute = InviteRouteImport.update({
   id: '/invite',
   path: '/invite',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CallbackRoute = CallbackRouteImport.update({
-  id: '/callback',
-  path: '/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EulaRoute = EulaRouteImport.update({
@@ -38,9 +37,9 @@ const EulaRoute = EulaRouteImport.update({
   path: '/eula',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PrivacyRoute = PrivacyRouteImport.update({
-  id: '/privacy',
-  path: '/privacy',
+const CallbackRoute = CallbackRouteImport.update({
+  id: '/callback',
+  path: '/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthedRoute = AuthedRouteImport.update({
@@ -52,11 +51,6 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthedVendorsRoute = AuthedVendorsRouteImport.update({
-  id: '/vendors',
-  path: '/vendors',
-  getParentRoute: () => AuthedRoute,
-} as any)
 const AuthedTeamRoute = AuthedTeamRouteImport.update({
   id: '/team',
   path: '/team',
@@ -67,9 +61,9 @@ const AuthedSettingsRoute = AuthedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthedRoute,
 } as any)
-const AuthedProjectsRoute = AuthedProjectsRouteImport.update({
-  id: '/projects',
-  path: '/projects',
+const AuthedQuickbooksRoute = AuthedQuickbooksRouteImport.update({
+  id: '/quickbooks',
+  path: '/quickbooks',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedInvoicesRoute = AuthedInvoicesRouteImport.update({
@@ -96,10 +90,9 @@ export interface FileRoutesByFullPath {
   '/privacy': typeof PrivacyRoute
   '/audit': typeof AuthedAuditRoute
   '/invoices': typeof AuthedInvoicesRoute
-  '/projects': typeof AuthedProjectsRoute
+  '/quickbooks': typeof AuthedQuickbooksRoute
   '/settings': typeof AuthedSettingsRoute
   '/team': typeof AuthedTeamRoute
-  '/vendors': typeof AuthedVendorsRoute
   '/invoices/$id': typeof AuthedInvoicesIdRoute
 }
 export interface FileRoutesByTo {
@@ -110,10 +103,9 @@ export interface FileRoutesByTo {
   '/privacy': typeof PrivacyRoute
   '/audit': typeof AuthedAuditRoute
   '/invoices': typeof AuthedInvoicesRoute
-  '/projects': typeof AuthedProjectsRoute
+  '/quickbooks': typeof AuthedQuickbooksRoute
   '/settings': typeof AuthedSettingsRoute
   '/team': typeof AuthedTeamRoute
-  '/vendors': typeof AuthedVendorsRoute
   '/invoices/$id': typeof AuthedInvoicesIdRoute
 }
 export interface FileRoutesById {
@@ -126,10 +118,9 @@ export interface FileRoutesById {
   '/privacy': typeof PrivacyRoute
   '/_authed/audit': typeof AuthedAuditRoute
   '/_authed/invoices': typeof AuthedInvoicesRoute
-  '/_authed/projects': typeof AuthedProjectsRoute
+  '/_authed/quickbooks': typeof AuthedQuickbooksRoute
   '/_authed/settings': typeof AuthedSettingsRoute
   '/_authed/team': typeof AuthedTeamRoute
-  '/_authed/vendors': typeof AuthedVendorsRoute
   '/_authed/invoices_/$id': typeof AuthedInvoicesIdRoute
 }
 export interface FileRouteTypes {
@@ -142,10 +133,9 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/audit'
     | '/invoices'
-    | '/projects'
+    | '/quickbooks'
     | '/settings'
     | '/team'
-    | '/vendors'
     | '/invoices/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -156,10 +146,9 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/audit'
     | '/invoices'
-    | '/projects'
+    | '/quickbooks'
     | '/settings'
     | '/team'
-    | '/vendors'
     | '/invoices/$id'
   id:
     | '__root__'
@@ -171,10 +160,9 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/_authed/audit'
     | '/_authed/invoices'
-    | '/_authed/projects'
+    | '/_authed/quickbooks'
     | '/_authed/settings'
     | '/_authed/team'
-    | '/_authed/vendors'
     | '/_authed/invoices_/$id'
   fileRoutesById: FileRoutesById
 }
@@ -189,18 +177,18 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/invite': {
       id: '/invite'
       path: '/invite'
       fullPath: '/invite'
       preLoaderRoute: typeof InviteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/callback': {
-      id: '/callback'
-      path: '/callback'
-      fullPath: '/callback'
-      preLoaderRoute: typeof CallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/eula': {
@@ -210,11 +198,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EulaRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/privacy': {
-      id: '/privacy'
-      path: '/privacy'
-      fullPath: '/privacy'
-      preLoaderRoute: typeof PrivacyRouteImport
+    '/callback': {
+      id: '/callback'
+      path: '/callback'
+      fullPath: '/callback'
+      preLoaderRoute: typeof CallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authed': {
@@ -231,13 +219,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authed/vendors': {
-      id: '/_authed/vendors'
-      path: '/vendors'
-      fullPath: '/vendors'
-      preLoaderRoute: typeof AuthedVendorsRouteImport
-      parentRoute: typeof AuthedRoute
-    }
     '/_authed/team': {
       id: '/_authed/team'
       path: '/team'
@@ -252,11 +233,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedSettingsRouteImport
       parentRoute: typeof AuthedRoute
     }
-    '/_authed/projects': {
-      id: '/_authed/projects'
-      path: '/projects'
-      fullPath: '/projects'
-      preLoaderRoute: typeof AuthedProjectsRouteImport
+    '/_authed/quickbooks': {
+      id: '/_authed/quickbooks'
+      path: '/quickbooks'
+      fullPath: '/quickbooks'
+      preLoaderRoute: typeof AuthedQuickbooksRouteImport
       parentRoute: typeof AuthedRoute
     }
     '/_authed/invoices': {
@@ -286,20 +267,18 @@ declare module '@tanstack/react-router' {
 interface AuthedRouteChildren {
   AuthedAuditRoute: typeof AuthedAuditRoute
   AuthedInvoicesRoute: typeof AuthedInvoicesRoute
-  AuthedProjectsRoute: typeof AuthedProjectsRoute
+  AuthedQuickbooksRoute: typeof AuthedQuickbooksRoute
   AuthedSettingsRoute: typeof AuthedSettingsRoute
   AuthedTeamRoute: typeof AuthedTeamRoute
-  AuthedVendorsRoute: typeof AuthedVendorsRoute
   AuthedInvoicesIdRoute: typeof AuthedInvoicesIdRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedAuditRoute: AuthedAuditRoute,
   AuthedInvoicesRoute: AuthedInvoicesRoute,
-  AuthedProjectsRoute: AuthedProjectsRoute,
+  AuthedQuickbooksRoute: AuthedQuickbooksRoute,
   AuthedSettingsRoute: AuthedSettingsRoute,
   AuthedTeamRoute: AuthedTeamRoute,
-  AuthedVendorsRoute: AuthedVendorsRoute,
   AuthedInvoicesIdRoute: AuthedInvoicesIdRoute,
 }
 

@@ -19,36 +19,6 @@ export function InvoiceSummary({ invoice, vendors, projects }: Props) {
   const project = projects.find((p) => p.id === invoice.project_id);
   return (
     <div className="space-y-4">
-      {/* ---------- Top card (mirrors the editable form's summary card) ---------- */}
-      <div className="bg-navy text-stone p-5 border-l-2 border-amber relative overflow-hidden">
-        <div className="absolute inset-0 bg-grid opacity-50 pointer-events-none" />
-        <div className="relative flex items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-amber mb-1">
-              Vendor
-            </div>
-            <div className="font-display text-xl leading-tight truncate">
-              {vendor?.display_name || invoice.vendor_name || (
-                <span className="text-stone/50 italic">Unassigned</span>
-              )}
-            </div>
-            {invoice.invoice_number && (
-              <div className="text-xs text-stone/60 font-mono mt-1">
-                Invoice #{invoice.invoice_number}
-              </div>
-            )}
-          </div>
-          <div className="text-right flex-shrink-0">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-amber mb-1">
-              Total
-            </div>
-            <div className="font-display text-2xl leading-none tabular-nums">
-              {formatCents(invoice.total_cents, invoice.currency)}
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Cambridge AP coding markup — only show when at least one field
           is populated. Hidden completely on un-coded invoices. */}
       {(invoice.job_number ||

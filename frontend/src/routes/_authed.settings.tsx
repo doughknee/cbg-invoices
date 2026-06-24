@@ -1,10 +1,14 @@
-import { createFileRoute, useSearch } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/solid";
 import {
   ArrowPathIcon,
+  BellIcon,
+  LinkIcon,
   PencilIcon,
   PlusIcon,
+  ShieldCheckIcon,
+  TagIcon,
   TrashIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
@@ -36,6 +40,11 @@ import {
   useRemoveTrustedDomain,
   useTrustedDomains,
 } from "@/lib/trustedDomains";
+import {
+  useNotificationSettings,
+  useRunDigestNow,
+  useUpdateNotificationSettings,
+} from "@/lib/notifications";
 import { useMe, ROLE_RANK } from "@/lib/users";
 import type {
   CodingField,
@@ -62,6 +71,7 @@ function SettingsPage() {
   const syncVendors = useSyncVendors();
   const syncProjects = useSyncProjects();
   const updateSettings = useUpdateQboSettings();
+  const navigate = useNavigate();
 
   const [banner, setBanner] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
@@ -99,11 +109,14 @@ function SettingsPage() {
 
       <div className="space-y-6">
         {/* QBO Connection */}
-        <Card accent="top">
+        <Card accent="top" id="quickbooks" className="scroll-mt-6">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="font-display text-2xl text-navy">QuickBooks Online</h2>
+                <h2 className="font-display text-2xl text-navy flex items-center gap-2">
+                  <LinkIcon className="h-5 w-5 text-amber" aria-hidden />
+                  QuickBooks Online
+                </h2>
                 <p className="text-xs text-slate-500 mt-1">
                   Post approved bills and sync vendors + projects.
                 </p>
@@ -175,6 +188,13 @@ function SettingsPage() {
                         {syncProjects.data && `(${syncProjects.data.count})`}
                       </Button>
                       <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => navigate({ to: "/quickbooks" })}
+                      >
+                        Vendors &amp; projects →
+                      </Button>
+                      <Button
                         variant="destructive"
                         size="sm"
                         onClick={() => disconnect.mutate()}
@@ -200,9 +220,15 @@ function SettingsPage() {
 
         {/* Sync settings */}
         {connected && (
-          <Card accent="left">
+          <Card accent="left" id="sync" className="scroll-mt-6">
             <CardHeader>
-              <h2 className="font-display text-2xl text-navy">Sync settings</h2>
+              <h2 className="font-display text-2xl text-navy flex items-center gap-2">
+                <ArrowPathIcon className="h-5 w-5 text-amber" aria-hidden />
+                Sync settings
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">
+                How projects and expense accounts map when posting to QuickBooks.
+              </p>
             </CardHeader>
             <CardBody>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -252,8 +278,155 @@ function SettingsPage() {
             Auto-populated from QBO vendor emails on every sync;
             admins can add manual entries for partners not in QBO. */}
         <TrustedDomainsSection />
+
+        {/* Daily review digest + send-time config. Admin/owner only. */}
+        <NotificationsSection />
       </div>
     </>
+  );
+}
+
+const TZ_OPTIONS = [
+  "America/Chicago",
+  "America/New_York",
+  "America/Denver",
+  "America/Los_Angeles",
+  "America/Phoenix",
+  "UTC",
+];
+
+// ──────────────────────────────────────────────────────────────────────────
+// Notifications — daily review digest schedule + a "send now" test. Admins+.
+// ──────────────────────────────────────────────────────────────────────────
+
+function NotificationsSection() {
+  const me = useMe();
+  const role = me.data?.role ?? "member";
+  const canManage = ROLE_RANK[role] >= ROLE_RANK.admin;
+
+  const { data } = useNotificationSettings({ enabled: canManage });
+  const update = useUpdateNotificationSettings();
+  const runDigest = useRunDigestNow();
+
+  const [enabled, setEnabled] = useState(true);
+  const [time, setTime] = useState("07:30");
+  const [tz, setTz] = useState("America/Chicago");
+  const [digestResult, setDigestResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (data) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate form from fetched settings
+      setEnabled(data.daily_digest_enabled);
+      setTime(data.daily_digest_time);
+      setTz(data.daily_digest_timezone);
+    }
+  }, [data]);
+
+  const dirty =
+    !!data &&
+    (enabled !== data.daily_digest_enabled ||
+      time !== data.daily_digest_time ||
+      tz !== data.daily_digest_timezone);
+
+  async function save() {
+    await update.mutateAsync({
+      daily_digest_enabled: enabled,
+      daily_digest_time: time,
+      daily_digest_timezone: tz,
+    });
+  }
+
+  async function sendNow() {
+    setDigestResult(null);
+    const r = await runDigest.mutateAsync();
+    setDigestResult(
+      r.skipped
+        ? "Email isn't configured (RESEND_API_KEY)."
+        : `Sent to ${r.recipients} recipient${r.recipients === 1 ? "" : "s"} (${r.pending_users} with pending invoices).`,
+    );
+  }
+
+  return (
+    <Card accent="left" id="notifications" className="scroll-mt-6">
+      <CardHeader>
+        <h2 className="font-display text-2xl text-navy flex items-center gap-2">
+          <BellIcon className="h-5 w-5 text-amber" aria-hidden />
+          Notifications
+        </h2>
+        <p className="text-xs text-slate-500 mt-1">
+          A daily email reminds each reviewer of the ready-for-review invoices
+          assigned to them.
+        </p>
+      </CardHeader>
+      <CardBody>
+        {!canManage ? (
+          <p className="text-sm text-slate-500">
+            Admins manage notification settings.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            <label className="flex items-center gap-2 text-sm text-graphite">
+              <input
+                type="checkbox"
+                checked={enabled}
+                onChange={(e) => setEnabled(e.target.checked)}
+                className="h-4 w-4 accent-amber"
+              />
+              Send the daily review digest
+            </label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input
+                label="Send time"
+                labelTone="quiet"
+                type="time"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                disabled={!enabled}
+              />
+              <Select
+                label="Timezone"
+                labelTone="quiet"
+                value={tz}
+                onChange={(e) => setTz(e.target.value)}
+                disabled={!enabled}
+              >
+                {(TZ_OPTIONS.includes(tz) ? TZ_OPTIONS : [tz, ...TZ_OPTIONS]).map(
+                  (z) => (
+                    <option key={z} value={z}>
+                      {z}
+                    </option>
+                  ),
+                )}
+              </Select>
+            </div>
+
+            {data?.daily_digest_last_sent_on && (
+              <p className="text-xs text-slate-500">
+                Last digest sent: {data.daily_digest_last_sent_on}
+              </p>
+            )}
+
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <Button onClick={save} loading={update.isPending} disabled={!dirty}>
+                Save
+              </Button>
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={sendNow}
+                loading={runDigest.isPending}
+              >
+                Send digest now
+              </Button>
+              {digestResult && (
+                <span className="text-xs text-slate-600">{digestResult}</span>
+              )}
+            </div>
+          </div>
+        )}
+      </CardBody>
+    </Card>
   );
 }
 
@@ -288,9 +461,12 @@ function APCodingSection() {
   );
 
   return (
-    <Card accent="left">
+    <Card accent="left" id="coding" className="scroll-mt-6">
       <CardHeader>
-        <h2 className="font-display text-2xl text-navy">AP coding options</h2>
+        <h2 className="font-display text-2xl text-navy flex items-center gap-2">
+          <TagIcon className="h-5 w-5 text-amber" aria-hidden />
+          AP coding options
+        </h2>
         <p className="text-xs text-slate-500 mt-1">
           Curated dropdowns shown when reviewing invoices. PMs can still
           enter custom values, but pre-defined options reduce typos and
@@ -657,9 +833,10 @@ function TrustedDomainsSection() {
   };
 
   return (
-    <Card accent="left">
+    <Card accent="left" id="domains" className="scroll-mt-6">
       <CardHeader>
-        <h2 className="font-display text-2xl text-navy">
+        <h2 className="font-display text-2xl text-navy flex items-center gap-2">
+          <ShieldCheckIcon className="h-5 w-5 text-amber" aria-hidden />
           Trusted email domains
         </h2>
         <p className="text-xs text-slate-500 mt-1">

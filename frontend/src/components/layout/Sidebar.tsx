@@ -1,9 +1,8 @@
 import { Link, useLocation } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { useLogto } from "@logto/react";
 import {
   DocumentTextIcon,
-  BuildingOffice2Icon,
-  FolderIcon,
   ClockIcon,
   Cog6ToothIcon,
   UsersIcon,
@@ -14,6 +13,13 @@ import { cn } from "@/lib/cn";
 import { postSignOutUri, useUser } from "@/lib/auth";
 import { useMe } from "@/lib/users";
 import { useAccessRequests } from "@/lib/accessRequests";
+import { useQboStatus } from "@/lib/qbo";
+import { SETTINGS_SECTIONS } from "@/lib/settingsSections";
+import {
+  defaultInvoiceView,
+  INVOICE_VIEWS,
+  isInvoiceView,
+} from "@/lib/invoiceViews";
 
 interface NavItem {
   to: string;
@@ -23,10 +29,8 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { to: "/invoices", label: "Invoices", Icon: DocumentTextIcon },
-  { to: "/vendors", label: "Vendors", Icon: BuildingOffice2Icon },
-  { to: "/projects", label: "Projects", Icon: FolderIcon },
   { to: "/team", label: "Team", Icon: UsersIcon },
-  { to: "/audit", label: "Audit log", Icon: ClockIcon },
+  { to: "/audit", label: "Activity", Icon: ClockIcon },
   { to: "/settings", label: "Settings", Icon: Cog6ToothIcon },
 ];
 
@@ -35,12 +39,67 @@ const NAV: NavItem[] = [
  * of the BottomTabBar — this component is hidden below `md`.
  */
 export function Sidebar() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const me = useMe();
   const canManage = me.data?.role === "owner" || me.data?.role === "admin";
   // Only admins+ get the access-requests query (others would 403)
   const reqQuery = useAccessRequests({ enabled: canManage });
   const pendingCount = reqQuery.data?.pending_count ?? 0;
+
+  // While on Settings, expand a jump-nav of the page's sections. The "sync"
+  // section only exists once QuickBooks is connected.
+  const onSettings = pathname.startsWith("/settings");
+  const onInvoiceList = pathname === "/invoices";
+  const qboConnected = useQboStatus().data?.connected ?? false;
+  const settingsSections = SETTINGS_SECTIONS.filter((s) => !s.requiresQbo || qboConnected);
+  const [activeSection, setActiveSection] = useState("");
+
+  // Scroll-spy that highlights the section in view. Tracking scroll (rather
+  // than an IntersectionObserver near the top) lets the LAST section win when
+  // the page is scrolled to the bottom — it can't reach the top, so an
+  // observer would never light it up, and we don't want to pad the page.
+  useEffect(() => {
+    if (!onSettings) return;
+    const scroller = document.querySelector<HTMLElement>("main");
+    if (!scroller) return;
+    const ids = SETTINGS_SECTIONS.map((s) => s.id);
+
+    function update() {
+      if (!scroller) return;
+      if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 4) {
+        const present = ids.filter((id) => document.getElementById(id));
+        if (present.length) setActiveSection(present[present.length - 1]);
+        return;
+      }
+      const scrollerTop = scroller.getBoundingClientRect().top;
+      let current = "";
+      for (const id of ids) {
+        const el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top - scrollerTop <= 120) current = id;
+      }
+      if (current) setActiveSection(current);
+    }
+
+    update();
+    scroller.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      scroller.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [onSettings, qboConnected]);
+
+  function jumpToSection(id: string) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    setActiveSection(id);
+  }
+
+  // On the invoice list, mirror the queue's filter pills as a jump-nav. The
+  // active filter lives in the URL (?view=), so these are plain links.
+  const currentView = (search as { view?: unknown }).view;
+  const activeView = isInvoiceView(currentView) ? currentView : defaultInvoiceView(canManage);
 
   return (
     <aside
@@ -87,6 +146,48 @@ export function Sidebar() {
                       </span>
                     )}
                   </Link>
+
+                  {to === "/settings" && active && settingsSections.length > 0 && (
+                    <ul className="mt-0.5 mb-1">
+                      {settingsSections.map((s) => (
+                        <li key={s.id}>
+                          <button
+                            type="button"
+                            onClick={() => jumpToSection(s.id)}
+                            className={cn(
+                              "w-full text-left pl-14 pr-6 py-1.5 text-xs transition-colors border-l-2",
+                              activeSection === s.id
+                                ? "border-amber text-stone"
+                                : "border-transparent text-slate-500 hover:text-stone hover:bg-white/5",
+                            )}
+                          >
+                            {s.label}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {to === "/invoices" && onInvoiceList && (
+                    <ul className="mt-0.5 mb-1">
+                      {INVOICE_VIEWS.map((v) => (
+                        <li key={v.key}>
+                          <Link
+                            to="/invoices"
+                            search={{ view: v.key }}
+                            className={cn(
+                              "block pl-14 pr-6 py-1.5 text-xs transition-colors border-l-2",
+                              v.key === activeView
+                                ? "border-amber text-stone"
+                                : "border-transparent text-slate-500 hover:text-stone hover:bg-white/5",
+                            )}
+                          >
+                            {v.label}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               );
             })}
@@ -96,7 +197,7 @@ export function Sidebar() {
         <AccountCard />
 
         <div className="px-6 py-3 text-[11px] text-slate-500 border-t border-stone/10">
-          <div className="font-mono">v0.1.0</div>
+          <div className="font-mono">v0.2.0</div>
         </div>
       </div>
     </aside>

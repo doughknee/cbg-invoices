@@ -1,22 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageHeader } from "@/components/layout/AppShell";
-import { useMobileAppBar } from "@/components/layout/MobileAppBar";
 import { InvoiceQueue } from "@/components/invoices/InvoiceQueue";
+import { isInvoiceView, type InvoiceView } from "@/lib/invoiceViews";
 
 export const Route = createFileRoute("/_authed/invoices")({
   component: InvoicesPage,
+  validateSearch: (search: Record<string, unknown>): { view?: InvoiceView } => ({
+    view: isInvoiceView(search.view) ? search.view : undefined,
+  }),
 });
 
 function InvoicesPage() {
-  useMobileAppBar({ title: "Invoices" });
-  return (
-    <>
-      <PageHeader
-        title="Invoice"
-        accent="Queue"
-        subtitle="Review extracted invoices and post approved bills to QuickBooks."
-      />
-      <InvoiceQueue />
-    </>
-  );
+  // The queue owns its header, mobile app bar, and upload affordances.
+  return <InvoiceQueue />;
 }
