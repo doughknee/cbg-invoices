@@ -113,6 +113,11 @@ export function InvoiceIdentityHeader({
               </span>
               <span className="text-stone/60 min-w-0 truncate">
                 Assigned to <span className="text-stone font-medium">{assigneeLabel}</span>
+                {invoice.claimed_at ? (
+                  <span className="text-green-300 whitespace-nowrap"> · claimed</span>
+                ) : (
+                  <span className="text-amber/90 whitespace-nowrap"> · not opened yet</span>
+                )}
               </span>
               {canManage && showAssignActions && (
                 <span className="ml-auto flex items-center gap-3 flex-shrink-0">

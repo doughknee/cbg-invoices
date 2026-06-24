@@ -9,6 +9,7 @@ import {
   ExclamationTriangleIcon,
   PaperAirplaneIcon,
   PencilSquareIcon,
+  UserPlusIcon,
   XCircleIcon,
 } from "@heroicons/react/24/outline";
 // ClockIcon stays in scope below — used in the StatusBanner for the
@@ -32,6 +33,7 @@ import {
   useApproveAndPostInvoice,
   useApproveInvoice,
   useAssignInvoice,
+  useClaimInvoice,
   useInvoice,
   usePatchInvoice,
   usePostInvoice,
@@ -87,6 +89,7 @@ function InvoiceDetailPage() {
   const unassign = useUnassignInvoice(id);
   const reject = useRejectInvoice(id);
   const reextract = useReextractInvoice(id);
+  const claim = useClaimInvoice(id);
 
   // Buffer the latest unsaved patch payload from ExtractedFieldsForm so we
   // can flush it on approve/post without re-rendering on every keystroke.
@@ -146,9 +149,13 @@ function InvoiceDetailPage() {
   const invoice = invoiceQuery.data;
   const me = meQuery.data;
   const myRole = me?.role ?? "member";
-  const canManageAssignments = ROLE_RANK[myRole] >= ROLE_RANK.admin;
+  const isAdmin = ROLE_RANK[myRole] >= ROLE_RANK.admin;
+  const canManageAssignments = isAdmin;
   const isAssignee = !!invoice && !!me && invoice.assigned_to_id === me.id;
-  const canReviewActions = !!invoice && !!me && isAssignee;
+  const isClaimed = !!invoice?.claimed_at;
+  // Admins review/act on any invoice directly; a member must be the assignee
+  // AND have claimed it (the signal that they've taken ownership).
+  const canReviewActions = !!me && (isAdmin || (isAssignee && isClaimed));
 
   // Mobile app-bar title: "Review" + status badge inline. Keep concise so
   // the right side has room for the back button.
@@ -264,7 +271,8 @@ function InvoiceDetailPage() {
     assign.isPending ||
     unassign.isPending ||
     reject.isPending ||
-    reextract.isPending;
+    reextract.isPending ||
+    claim.isPending;
 
   async function flushDirty() {
     if (dirty && pendingPatch.current) {
@@ -299,6 +307,10 @@ function InvoiceDetailPage() {
     });
     setAssignFlow(null);
     setForceEdit(false);
+  }
+
+  async function handleClaim() {
+    await claim.mutateAsync();
   }
 
   async function handlePost() {
@@ -532,12 +544,14 @@ function InvoiceDetailPage() {
           onReject={() => setShowRejectModal(true)}
           onApprove={handleApprove}
           onApproveAndPost={handleApproveAndPost}
-          onAssign={() => setAssignFlow("assign")}
+          onAssign={() => setAssignFlow(invoice.assigned_to_id ? "reassign" : "assign")}
           onPost={handlePost}
           onUnapprove={handleUnapprove}
+          onClaim={handleClaim}
           patchPending={patch.isPending}
-          canManageAssignments={canManageAssignments}
-          canReviewActions={canReviewActions}
+          isAdmin={isAdmin}
+          isAssignee={isAssignee}
+          isClaimed={isClaimed}
         />
       )}
 
@@ -893,9 +907,11 @@ interface FooterProps {
   onAssign: () => void;
   onPost: () => void;
   onUnapprove: () => void;
+  onClaim: () => void;
   patchPending: boolean;
-  canManageAssignments: boolean;
-  canReviewActions: boolean;
+  isAdmin: boolean;
+  isAssignee: boolean;
+  isClaimed: boolean;
 }
 
 function ActionFooter(props: FooterProps) {
@@ -915,12 +931,19 @@ function ActionFooter(props: FooterProps) {
     onAssign,
     onPost,
     onUnapprove,
+    onClaim,
     patchPending,
-    canManageAssignments,
-    canReviewActions,
+    isAdmin,
+    isAssignee,
+    isClaimed,
   } = props;
 
-  // Pick the primary action based on status
+  // Admins act on any invoice. Members must be the assignee AND have claimed
+  // it; an unclaimed assignee's only move is to claim it first.
+  const canAct = isAdmin || (isAssignee && isClaimed);
+  const mustClaim = !isAdmin && isAssignee && !isClaimed;
+
+  // Pick the primary action based on status + role.
   let primary: {
     label: string;
     onClick: () => void;
@@ -931,17 +954,11 @@ function ActionFooter(props: FooterProps) {
   let options: SplitButtonOption[] = [];
 
   if (invoice.status === "ready_for_review" || invoice.status === "extraction_failed") {
-    if (!invoice.assigned_to_id && canManageAssignments) {
-      primary = {
-        label: "Assign",
-        onClick: onAssign,
-      };
+    if (mustClaim) {
+      primary = { label: "Claim to review", onClick: onClaim };
       options = [];
-    } else if (canReviewActions) {
-      primary = {
-        label: "Approve",
-        onClick: onApprove,
-      };
+    } else if (canAct) {
+      primary = { label: "Approve", onClick: onApprove };
       options = [
         {
           label: "Approve & Post to QBO",
@@ -953,11 +970,21 @@ function ActionFooter(props: FooterProps) {
           icon: <PaperAirplaneIcon className="h-4 w-4" />,
         },
       ];
+      // Admins can hand the invoice off to a teammate instead of approving it.
+      if (isAdmin) {
+        options.push({
+          label: invoice.assigned_to_id ? "Reassign…" : "Assign to teammate…",
+          description: "Hand off to a team member to review",
+          onSelect: onAssign,
+          icon: <UserPlusIcon className="h-4 w-4" />,
+        });
+      }
     } else {
+      // A member who isn't the assignee has nothing to do here.
       return null;
     }
   } else if (invoice.status === "approved") {
-    if (!canReviewActions) {
+    if (!canAct) {
       return null;
     }
     primary = {
@@ -979,9 +1006,8 @@ function ActionFooter(props: FooterProps) {
     return null;
   }
 
-  // We only reach this point in non-terminal states (ready_for_review,
-  // extraction_failed, approved), so Reject is always allowed here.
-  const rejectVisible = canReviewActions;
+  // Reject is available to anyone who can act — but not while just claiming.
+  const rejectVisible = canAct;
 
   // When forceEdit is on for an already-approved invoice, show an edit-mode
   // footer instead — "Save and re-approve" etc.
@@ -991,7 +1017,7 @@ function ActionFooter(props: FooterProps) {
   // mobile a single full-width primary button is the only main control.
   // Desktop still surfaces them inline.
   const mobileExtraOptions: SplitButtonOption[] = [];
-  if (showEditor && canReviewActions) {
+  if (showEditor && canAct) {
     mobileExtraOptions.push({
       label: dirty ? "Save draft" : "Saved",
       description: dirty
@@ -1068,7 +1094,7 @@ function ActionFooter(props: FooterProps) {
               Reject
             </Button>
           )}
-          {showEditor && canReviewActions && (
+          {showEditor && canAct && (
             <Button
               variant="secondary"
               onClick={onSave}

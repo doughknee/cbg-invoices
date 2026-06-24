@@ -18,7 +18,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { Button } from "@/components/ui/Button";
 import { formatCents, formatRelative } from "@/lib/format";
 import {
-  useAssignInvoice,
+  useClaimInvoice,
   usePostInvoice,
   usePromoteFromTriage,
   useRejectInvoice,
@@ -87,13 +87,14 @@ export function QueueRow({
 }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const assign = useAssignInvoice(invoice.id);
+  const claim = useClaimInvoice(invoice.id);
   const post = usePostInvoice(invoice.id);
   const promote = usePromoteFromTriage(invoice.id);
   const [posting, setPosting] = useState(false);
 
   const isAdmin = me?.role === "owner" || me?.role === "admin";
   const isMine = !!me && invoice.assigned_to_id === me.id;
+  const isClaimed = !!invoice.claimed_at;
   const isTriage = invoice.status === "needs_triage";
   const isActive = ACTIVE.has(invoice.status);
 
@@ -109,14 +110,13 @@ export function QueueRow({
     if (posting && invoice.qbo_post_error) setPosting(false);
   }, [invoice.qbo_post_error, posting]);
 
-  async function claimAndReview() {
-    if (!me) return;
-    await assign.mutateAsync({
-      user_id: me.id,
-      user_email: me.email,
-      user_name: me.name,
-    });
+  function goReview() {
     void navigate({ to: "/invoices/$id", params: { id: invoice.id } });
+  }
+
+  async function claimAndReview() {
+    await claim.mutateAsync();
+    goReview();
   }
 
   function triggerPost() {
@@ -162,39 +162,43 @@ export function QueueRow({
     .join("  ·  ");
 
   // The single (or paired) next action for this row.
+  //
+  //   Admin   → review/act on anything directly (no self-assign).
+  //   Member  → only their assigned invoices, and "Claim & review" first to
+  //             signal they've taken ownership. Triage is admin-only.
   let action: React.ReactNode;
   if (isTriage) {
     action = (
       <>
-        <button
-          type="button"
-          onClick={() => onReject(invoice)}
-          className="text-xs font-semibold text-slate-500 hover:text-red-700 whitespace-nowrap"
-        >
-          Reject
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => onReject(invoice)}
+            className="text-xs font-semibold text-slate-500 hover:text-red-700 whitespace-nowrap"
+          >
+            Reject
+          </button>
+        )}
         <ActionButton onClick={() => promote.mutate(undefined, { onSuccess: bumpQueue })} loading={promote.isPending}>
           Promote
         </ActionButton>
       </>
     );
-  } else if (isActive && !invoice.assigned_to_id) {
-    action = isAdmin ? (
-      <ActionButton onClick={claimAndReview} loading={assign.isPending}>
-        Claim &amp; review
-      </ActionButton>
-    ) : (
-      <TextLink invoiceId={invoice.id}>Review →</TextLink>
-    );
   } else if (isActive) {
-    action = isMine ? (
-      <ActionButton onClick={() => navigate({ to: "/invoices/$id", params: { id: invoice.id } })}>
-        Review
-      </ActionButton>
-    ) : (
-      <TextLink invoiceId={invoice.id}>Open →</TextLink>
-    );
-  } else if (invoice.status === "approved" && qboConnected && isMine) {
+    if (isAdmin) {
+      action = <ActionButton onClick={goReview}>Review</ActionButton>;
+    } else if (isMine) {
+      action = isClaimed ? (
+        <ActionButton onClick={goReview}>Review</ActionButton>
+      ) : (
+        <ActionButton onClick={claimAndReview} loading={claim.isPending}>
+          Claim &amp; review
+        </ActionButton>
+      );
+    } else {
+      action = <TextLink invoiceId={invoice.id}>Open →</TextLink>;
+    }
+  } else if (invoice.status === "approved" && qboConnected && (isAdmin || isMine)) {
     action = (
       <>
         <TextLink invoiceId={invoice.id}>Open</TextLink>

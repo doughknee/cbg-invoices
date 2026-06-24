@@ -296,10 +296,9 @@ async def patch_invoice(
 #   approved ──► posted_to_qbo      (manual post)
 #   approved ──► ready_for_review   (unapprove, back to editing)
 #
-# Assignment is a *workflow signaling* feature — having an assignee moves
-# the invoice from "Need Review" to "Assigned" in the queue UI, and now also
-# gates review actions. Admins/owners manage assignment; only the assignee can
-# approve, unapprove, or post to QBO.
+# Assignment is a workflow-signaling feature. Admins/owners review and approve
+# any invoice directly; plain members can only act on invoices assigned to
+# them, and "claim" them (set claimed_at) to signal they've taken ownership.
 
 
 async def _require_admin(user: CurrentUser, *, action: str) -> None:
@@ -315,35 +314,39 @@ async def _require_assignment_manager(user: CurrentUser) -> None:
     await _require_admin(user, action="assign invoices")
 
 
-def _ensure_review_assignee(invoice: Invoice, user: CurrentUser, *, action: str) -> None:
-    if not invoice.assigned_to_id:
-        raise HTTPException(
-            status_code=409,
-            detail=f"This invoice must be assigned before you can {action}.",
-        )
+async def _ensure_can_review(invoice: Invoice, user: CurrentUser, *, action: str) -> None:
+    """Who may approve / post / unapprove an invoice.
+
+    Admins and owners review and act on *any* invoice directly — they don't
+    have to assign it to themselves first. Everyone else may only act on an
+    invoice that's assigned to them.
+    """
+    role = await logto_admin.user_app_role(user.id) or "member"
+    if role in {"owner", "admin"}:
+        return
     if invoice.assigned_to_id != user.id:
         raise HTTPException(
             status_code=403,
             detail=(
-                f"Only the assigned user can {action}. "
-                "Reassign the invoice if someone else needs to handle it."
+                f"Only an admin or the assigned user can {action}. "
+                "Ask an admin to assign it to you if you need to handle it."
             ),
         )
 
 
-def _ensure_can_reject(invoice: Invoice, user: CurrentUser) -> None:
-    """Reject stays open on *unassigned* invoices (e.g. triaging junk mail),
-    but once an invoice is assigned to someone, only that assignee may reject
-    it — the same guard the other review actions enforce. An admin who needs
-    to take it over reassigns it first.
+async def _ensure_can_reject(invoice: Invoice, user: CurrentUser) -> None:
+    """Who may reject an invoice: an admin/owner, or the user it's assigned to.
+
+    Unassigned invoices (e.g. triage) are an admin responsibility, so a plain
+    member can only reject invoices that are actually assigned to them.
     """
-    if invoice.assigned_to_id and invoice.assigned_to_id != user.id:
+    role = await logto_admin.user_app_role(user.id) or "member"
+    if role in {"owner", "admin"}:
+        return
+    if invoice.assigned_to_id != user.id:
         raise HTTPException(
             status_code=403,
-            detail=(
-                "This invoice is assigned to someone else. "
-                "Reassign it before you can reject it."
-            ),
+            detail="Only an admin or the assigned user can reject this invoice.",
         )
 
 
@@ -431,7 +434,7 @@ async def approve_invoice(
     invoice = await session.get(Invoice, invoice_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    _ensure_review_assignee(invoice, user, action="approve")
+    await _ensure_can_review(invoice, user, action="approve")
     _ensure_approvable(invoice)
 
     _mark_approved(invoice, user)
@@ -461,7 +464,7 @@ async def post_invoice_to_qbo(
     invoice = await session.get(Invoice, invoice_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    _ensure_review_assignee(invoice, user, action="post to QBO")
+    await _ensure_can_review(invoice, user, action="post to QBO")
     if invoice.status == InvoiceStatus.POSTED_TO_QBO:
         raise HTTPException(status_code=409, detail="Already posted to QBO")
     if invoice.status != InvoiceStatus.APPROVED:
@@ -497,7 +500,7 @@ async def approve_and_post(
     invoice = await session.get(Invoice, invoice_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    _ensure_review_assignee(invoice, user, action="approve and post")
+    await _ensure_can_review(invoice, user, action="approve and post")
     _ensure_approvable(invoice)
     _ensure_postable(invoice)
 
@@ -527,7 +530,7 @@ async def unapprove_invoice(
     invoice = await session.get(Invoice, invoice_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    _ensure_review_assignee(invoice, user, action="unapprove")
+    await _ensure_can_review(invoice, user, action="unapprove")
     if invoice.status != InvoiceStatus.APPROVED:
         raise HTTPException(
             status_code=409,
@@ -568,6 +571,8 @@ async def assign_invoice(
     invoice.assigned_to_email = body.user_email
     invoice.assigned_to_name = body.user_name
     invoice.assigned_at = datetime.now(UTC)
+    # New assignee hasn't opened it yet — reset the claim signal.
+    invoice.claimed_at = None
     await audit.record(
         session,
         actor_id=user.id,
@@ -613,6 +618,7 @@ async def unassign_invoice(
     invoice.assigned_to_email = None
     invoice.assigned_to_name = None
     invoice.assigned_at = None
+    invoice.claimed_at = None
     if prev:
         await audit.record(
             session,
@@ -623,6 +629,37 @@ async def unassign_invoice(
             message=prev,
         )
     await session.commit()
+    return await _detail_with_pdf(invoice)
+
+
+@router.post("/{invoice_id}/claim", response_model=InvoiceDetail)
+async def claim_invoice(
+    invoice_id: UUID,
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    """The assignee marks an invoice as claimed — a signal to admins that
+    they've opened it and taken ownership. Only the assignee may claim, and
+    the call is idempotent (claiming an already-claimed invoice is a no-op).
+    """
+    invoice = await session.get(Invoice, invoice_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if invoice.assigned_to_id != user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the assigned user can claim this invoice.",
+        )
+    if invoice.claimed_at is None:
+        invoice.claimed_at = datetime.now(UTC)
+        await audit.record(
+            session,
+            actor_id=user.id,
+            actor_email=user.email,
+            action="invoice_claimed",
+            invoice_id=invoice_id,
+        )
+        await session.commit()
     return await _detail_with_pdf(invoice)
 
 
@@ -638,7 +675,7 @@ async def reject_invoice(
         raise HTTPException(status_code=404, detail="Invoice not found")
     if invoice.status == InvoiceStatus.POSTED_TO_QBO:
         raise HTTPException(status_code=409, detail="Cannot reject invoice already posted to QBO")
-    _ensure_can_reject(invoice, user)
+    await _ensure_can_reject(invoice, user)
 
     invoice.status = InvoiceStatus.REJECTED
     invoice.reviewed_by = user.id

@@ -207,6 +207,22 @@ export function useAssignInvoice(id: string) {
   });
 }
 
+/**
+ * The assignee claims an invoice — signals to admins that they've opened it
+ * and taken ownership. Idempotent on the backend.
+ */
+export function useClaimInvoice(id: string) {
+  const { request } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => request<Invoice>(`/api/invoices/${id}/claim`, { method: "POST" }),
+    onSuccess: (data) => {
+      qc.setQueryData(qk.invoices.detail(id), data);
+      void qc.invalidateQueries({ queryKey: qk.invoices.root() });
+    },
+  });
+}
+
 export function useUnassignInvoice(id: string) {
   const { request } = useApi();
   const qc = useQueryClient();
