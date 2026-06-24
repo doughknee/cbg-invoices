@@ -17,6 +17,8 @@ import {
 import { useMobileAppBar } from "@/components/layout/MobileAppBar";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { Button } from "@/components/ui/Button";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { LoadingState } from "@/components/ui/LoadingState";
 import { SplitButton, type SplitButtonOption } from "@/components/ui/SplitButton";
 import {
   DocumentTypeBadge,
@@ -157,10 +159,15 @@ function InvoiceDetailPage() {
   // AND have claimed it (the signal that they've taken ownership).
   const canReviewActions = !!me && (isAdmin || (isAssignee && isClaimed));
 
-  // Mobile app-bar title: "Review" + status badge inline. Keep concise so
-  // the right side has room for the back button.
+  // Mobile app-bar title: the vendor, so you know which invoice you're on
+  // without scrolling. Falls back to "Review" before it loads.
+  const mobileTitle =
+    (invoice &&
+      (vendorsQuery.data?.vendors.find((v) => v.id === invoice.vendor_id)?.display_name ||
+        invoice.vendor_name)) ||
+    "Review";
   useMobileAppBar({
-    title: "Review",
+    title: mobileTitle,
     action: (
       <button
         type="button"
@@ -246,18 +253,18 @@ function InvoiceDetailPage() {
   }, [invoice, mode, canReviewActions]);
 
   if (invoiceQuery.isLoading) {
-    return <div className="py-20 text-center text-slate-500 text-sm">Loading invoice…</div>;
+    return <LoadingState message="Loading invoice…" />;
   }
   if (invoiceQuery.error || !invoice) {
     return (
-      <div className="py-20 text-center">
-        <p className="text-red-700 text-sm">
-          {(invoiceQuery.error as Error | null)?.message ?? "Invoice not found"}
-        </p>
-        <Button className="mt-4" variant="secondary" onClick={() => navigate({ to: "/invoices" })}>
-          Back to queue
-        </Button>
-      </div>
+      <ErrorState
+        title="Couldn't load invoice"
+        message={
+          (invoiceQuery.error as Error | null)?.message ??
+          "This invoice may have been removed."
+        }
+        onRetry={() => void invoiceQuery.refetch()}
+      />
     );
   }
 
@@ -402,7 +409,13 @@ function InvoiceDetailPage() {
       />
 
       {/* Context banners */}
-      <StatusBanner invoice={invoice} qbo={qboQuery.data} qboConnected={qboConnected}>
+      <StatusBanner
+        invoice={invoice}
+        qbo={qboQuery.data}
+        qboConnected={qboConnected}
+        isAdmin={isAdmin}
+        onReject={() => setShowRejectModal(true)}
+      >
         {invoice.status === "extraction_failed" && (
           <Button
             variant="secondary"
@@ -670,11 +683,15 @@ function StatusBanner({
   invoice,
   qbo,
   qboConnected,
+  isAdmin,
+  onReject,
   children,
 }: {
   invoice: Invoice;
   qbo: QboStatus | undefined;
   qboConnected: boolean;
+  isAdmin: boolean;
+  onReject: () => void;
   children?: React.ReactNode;
 }) {
   const base =
@@ -761,7 +778,7 @@ function StatusBanner({
     );
   }
   if (invoice.status === "needs_triage") {
-    return <TriageBanner invoice={invoice} />;
+    return <TriageBanner invoice={invoice} isAdmin={isAdmin} onReject={onReject} />;
   }
   return null;
 }
@@ -772,7 +789,15 @@ function StatusBanner({
  * the same Promote / Trust+promote / Reject actions the queue's
  * TriageRow exposes — so AP can act without scrolling to the footer.
  */
-function TriageBanner({ invoice }: { invoice: Invoice }) {
+function TriageBanner({
+  invoice,
+  isAdmin,
+  onReject,
+}: {
+  invoice: Invoice;
+  isAdmin: boolean;
+  onReject: () => void;
+}) {
   const promote = usePromoteFromTriage(invoice.id);
   const trustAndPromote = useTrustSenderAndPromote(invoice.id);
 
@@ -836,6 +861,11 @@ function TriageBanner({ invoice }: { invoice: Invoice }) {
         >
           Promote to review queue
         </Button>
+        {isAdmin && (
+          <Button variant="destructive" size="sm" onClick={onReject} disabled={busy}>
+            Reject
+          </Button>
+        )}
       </div>
     </div>
   );

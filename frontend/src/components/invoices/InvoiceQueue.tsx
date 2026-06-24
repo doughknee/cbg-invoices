@@ -60,9 +60,14 @@ const EMPTY: Record<PillKey, { title: string; body: string }> = {
 
 export function InvoiceQueue() {
   const me = useMe();
+  const isAdmin = me.data?.role === "owner" || me.data?.role === "admin";
   const qbo = useQboStatus();
   const qboConnected = qbo.data?.connected ?? false;
-  const [active, setActive] = useState<PillKey>("needs_review");
+  // Members land on their own work; admins on the unassigned review pile.
+  // Null until the user picks a pill, so the role-based default can apply once
+  // we know who they are without overriding a manual choice.
+  const [active, setActive] = useState<PillKey | null>(null);
+  const activePill: PillKey = active ?? (me.data && !isAdmin ? "mine" : "needs_review");
   const [q, setQ] = useState("");
   const [rejecting, setRejecting] = useState<Invoice | null>(null);
 
@@ -94,7 +99,7 @@ export function InvoiceQueue() {
   );
   useMobileAppBar({ title: "Invoices", action: mobileUploadAction });
 
-  const pill = PILLS.find((p) => p.key === active) ?? PILLS[0];
+  const pill = PILLS.find((p) => p.key === activePill) ?? PILLS[0];
 
   // Lightweight count-only queries drive the pill badges.
   const cNeed = useInvoices({ status: ACTIVE, assigned: "false", page_size: 1 });
@@ -120,9 +125,9 @@ export function InvoiceQueue() {
   const chips = PILLS.map((p) => ({ key: p.key, label: p.label, count: counts[p.key] }));
   const empty = q
     ? { title: "No matches", body: `Nothing matches “${q}”. Try a different term.` }
-    : EMPTY[active];
+    : EMPTY[activePill];
   const emptyCta =
-    !q && (active === "needs_review" || active === "all") ? (
+    !q && (activePill === "needs_review" || activePill === "all") ? (
       <Button variant="secondary" size="sm" onClick={openPicker}>
         <ArrowUpTrayIcon className="h-4 w-4" aria-hidden />
         Upload a PDF
@@ -183,7 +188,7 @@ export function InvoiceQueue() {
         {/* Controls live in the card header so the list reads as one anchored
             panel — no thin filter row floating in empty page background. */}
         <div className="px-4 py-3 border-b border-stone/60 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <FilterChips chips={chips} active={active} onChange={setActive} />
+          <FilterChips chips={chips} active={activePill} onChange={setActive} />
           <div className="relative flex-shrink-0 sm:w-64">
             <MagnifyingGlassIcon
               className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400"
