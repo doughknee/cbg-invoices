@@ -1,6 +1,7 @@
 """FastAPI application entrypoint."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -19,6 +20,7 @@ from app.routers import (
     coding_options,
     health,
     invoices,
+    notifications,
     projects,
     qbo,
     trusted_domains,
@@ -49,7 +51,19 @@ async def lifespan(app: FastAPI):
         await logto_admin.seed_initial_owner()
     except Exception as exc:  # noqa: BLE001
         log.warning("Role bootstrap skipped: %s", exc)
+
+    # In-process daily-digest scheduler (the app avoids Redis/Celery).
+    from app.services import notifications as notif
+
+    digest_task = asyncio.create_task(notif.digest_scheduler_loop())
+
     yield
+
+    digest_task.cancel()
+    try:
+        await digest_task
+    except asyncio.CancelledError:
+        pass
     log.info("Shutting down")
 
 
@@ -110,3 +124,4 @@ app.include_router(users.router, prefix=f"{API_PREFIX}/users")
 app.include_router(access_requests.router, prefix=f"{API_PREFIX}/access-requests")
 app.include_router(coding_options.router, prefix=f"{API_PREFIX}/coding-options")
 app.include_router(trusted_domains.router, prefix=f"{API_PREFIX}/trusted-domains")
+app.include_router(notifications.router, prefix=f"{API_PREFIX}/notifications")

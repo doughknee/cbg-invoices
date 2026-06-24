@@ -3,6 +3,7 @@ from app.models.access_request import AccessRequest, AccessRequestStatus
 from app.models.audit_log import AuditLog
 from app.models.coding_option import CODING_FIELD_VALUES, CodingOption
 from app.models.invoice import DocumentType, Invoice, InvoiceStatus, TriageReason
+from app.models.notification_settings import NotificationSettings
 from app.models.project import Project
 from app.models.qbo_token import QboToken
 from app.models.trusted_sender_domain import SOURCE_VALUES, TrustedSenderDomain
@@ -17,6 +18,7 @@ __all__ = [
     "DocumentType",
     "Invoice",
     "InvoiceStatus",
+    "NotificationSettings",
     "Project",
     "QboToken",
     "SOURCE_VALUES",
