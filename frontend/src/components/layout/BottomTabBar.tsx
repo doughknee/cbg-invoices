@@ -1,12 +1,10 @@
 /**
  * Bottom tab bar — primary navigation on mobile (<md only).
  *
- * Five slots:
+ * Slots:
  *   1. Invoices  · DocumentTextIcon
- *   2. Vendors   · BuildingOffice2Icon
- *   3. Projects  · FolderIcon
- *   4. Team      · UsersIcon (with pending-access-request badge for admins)
- *   5. More      · EllipsisHorizontalIcon — opens the MoreSheet (Audit,
+ *   2. Team      · UsersIcon (with pending-access-request badge for admins)
+ *   3. More      · EllipsisHorizontalIcon — opens the MoreSheet (Audit,
  *                  Settings, Account, Sign out)
  *
  * Active tab gets an amber top border, amber filled icon, navy label.
@@ -14,17 +12,13 @@
  */
 import { Link, useLocation } from "@tanstack/react-router";
 import {
-  BuildingOffice2Icon,
   DocumentTextIcon,
   EllipsisHorizontalCircleIcon,
-  FolderIcon,
   UsersIcon,
 } from "@heroicons/react/24/outline";
 import {
-  BuildingOffice2Icon as BuildingOffice2Solid,
   DocumentTextIcon as DocumentTextSolid,
   EllipsisHorizontalCircleIcon as EllipsisSolid,
-  FolderIcon as FolderSolid,
   UsersIcon as UsersSolid,
 } from "@heroicons/react/24/solid";
 import type { ComponentType, SVGProps } from "react";
@@ -48,20 +42,6 @@ const NAV_TABS: NavTab[] = [
     IconActive: DocumentTextSolid,
     // Includes /invoices and /invoices/$id
     matches: (p) => p === "/invoices" || p.startsWith("/invoices/"),
-  },
-  {
-    to: "/vendors",
-    label: "Vendors",
-    Icon: BuildingOffice2Icon,
-    IconActive: BuildingOffice2Solid,
-    matches: (p) => p.startsWith("/vendors"),
-  },
-  {
-    to: "/projects",
-    label: "Projects",
-    Icon: FolderIcon,
-    IconActive: FolderSolid,
-    matches: (p) => p.startsWith("/projects"),
   },
   {
     to: "/team",

@@ -1,4 +1,4 @@
-import { createFileRoute, useSearch } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/solid";
 import {
@@ -67,6 +67,7 @@ function SettingsPage() {
   const syncVendors = useSyncVendors();
   const syncProjects = useSyncProjects();
   const updateSettings = useUpdateQboSettings();
+  const navigate = useNavigate();
 
   const [banner, setBanner] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
@@ -178,6 +179,13 @@ function SettingsPage() {
                         <ArrowPathIcon className="h-4 w-4" />
                         Sync projects{" "}
                         {syncProjects.data && `(${syncProjects.data.count})`}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => navigate({ to: "/quickbooks" })}
+                      >
+                        Vendors &amp; projects →
                       </Button>
                       <Button
                         variant="destructive"

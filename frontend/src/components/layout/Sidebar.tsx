@@ -2,8 +2,6 @@ import { Link, useLocation } from "@tanstack/react-router";
 import { useLogto } from "@logto/react";
 import {
   DocumentTextIcon,
-  BuildingOffice2Icon,
-  FolderIcon,
   ClockIcon,
   Cog6ToothIcon,
   UsersIcon,
@@ -23,8 +21,6 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { to: "/invoices", label: "Invoices", Icon: DocumentTextIcon },
-  { to: "/vendors", label: "Vendors", Icon: BuildingOffice2Icon },
-  { to: "/projects", label: "Projects", Icon: FolderIcon },
   { to: "/team", label: "Team", Icon: UsersIcon },
   { to: "/audit", label: "Audit log", Icon: ClockIcon },
   { to: "/settings", label: "Settings", Icon: Cog6ToothIcon },
