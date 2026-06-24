@@ -1,414 +1,149 @@
 import { useState } from "react";
-import {
-  ArchiveBoxIcon,
-  ArrowUturnLeftIcon,
-  CheckCircleIcon,
-  ExclamationTriangleIcon,
-  InboxIcon,
-  UserCircleIcon,
-  UsersIcon,
-} from "@heroicons/react/24/outline";
-import { useUser } from "@/lib/auth";
+import { InboxIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { useMe } from "@/lib/users";
 import { useInvoices, type ListParams } from "@/lib/invoices";
-import type { InvoiceStatus } from "@/types";
-import { InvoiceRow, InvoiceCard } from "./InvoiceRow";
-import { TriageCard, TriageRow } from "./TriageRow";
+import { useQboStatus } from "@/lib/qbo";
+import type { Invoice, InvoiceStatus } from "@/types";
+import { QueueRejectModal, QueueRow } from "./QueueRow";
 import { UploadDropzone } from "./UploadDropzone";
-import { EmptyState as UiEmptyState } from "@/components/ui/EmptyState";
+import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { LoadingState } from "@/components/ui/LoadingState";
 import { FilterChips } from "@/components/ui/FilterChips";
-import { cn } from "@/lib/cn";
 
 /**
- * The queue's filter model is a four-stage workflow:
- *
- *   Need Review (unassigned) → Assigned (in flight) → Approved → Archived
- *
- * Each stage corresponds to a tab. Posted-to-QBO invoices are folded into
- * the Approved tab and differentiated by a per-row sub-badge — keeping the
- * "done" view as a single place to look. Archived (rejected) is kept
- * deliberately subdued since it's a reference view, not a daily workflow.
- *
- * The "Mine only" toggle applies on Assigned + Approved only — on Need
- * Review it would always be empty (those invoices are unassigned by
- * definition), and on Archived it isn't useful for daily work.
+ * The queue is a work inbox, not a tour of workflow stages. The filter pills
+ * answer "what needs me?" — and every row carries its own next action, so the
+ * detail page is for careful review, not routine clicks.
  */
-type FilterKey =
-  | "need_review"
-  | "assigned"
-  | "approved"
-  | "triage"
-  | "archived";
+const ACTIVE: InvoiceStatus[] = ["ready_for_review", "extraction_failed", "received", "extracting"];
 
-interface FilterDef {
-  key: FilterKey;
+type PillKey = "needs_review" | "mine" | "ready_to_post" | "triage" | "all";
+
+interface Pill {
+  key: PillKey;
   label: string;
-  status: InvoiceStatus[];
-  /**
-   * Default value of the `assigned` server-side param when this tab is
-   * active. The Mine toggle (when applicable) overrides to "mine".
-   */
-  defaultAssigned?: "true" | "false";
-  /** Whether the "Mine only" toggle should appear when this tab is active. */
-  mineCapable: boolean;
+  params: Pick<ListParams, "status" | "assigned">;
 }
 
-const ACTIVE_STATUSES: InvoiceStatus[] = [
-  "ready_for_review",
-  "extraction_failed",
-  "received",
-  "extracting",
+const PILLS: Pill[] = [
+  { key: "needs_review", label: "Needs review", params: { status: ACTIVE, assigned: "false" } },
+  { key: "mine", label: "Assigned to me", params: { status: ACTIVE, assigned: "mine" } },
+  { key: "ready_to_post", label: "Ready to post", params: { status: ["approved"] } },
+  { key: "triage", label: "Triage", params: { status: ["needs_triage"] } },
+  { key: "all", label: "All", params: {} },
 ];
 
-const FILTERS: FilterDef[] = [
-  {
-    key: "need_review",
-    label: "Need Review",
-    status: ACTIVE_STATUSES,
-    defaultAssigned: "false",
-    mineCapable: false,
+const EMPTY: Record<PillKey, { title: string; body: string }> = {
+  needs_review: {
+    title: "Inbox is clear",
+    body: "Nothing waiting to be picked up. Upload a PDF above, or have a vendor email your inbound address.",
   },
-  {
-    key: "assigned",
-    label: "Assigned",
-    status: ACTIVE_STATUSES,
-    defaultAssigned: "true",
-    mineCapable: true,
+  mine: { title: "Nothing assigned to you", body: "Invoices assigned to you show up here." },
+  ready_to_post: {
+    title: "Nothing to post",
+    body: "Approved invoices waiting to go to QuickBooks land here.",
   },
-  {
-    key: "approved",
-    label: "Approved",
-    status: ["approved", "posted_to_qbo"],
-    mineCapable: true,
+  triage: {
+    title: "Nothing needs triage",
+    body: "Ambiguous documents — statements, quotes, encrypted PDFs — land here for a quick decision.",
   },
-  {
-    key: "triage",
-    label: "Triage",
-    status: ["needs_triage"],
-    mineCapable: false,
-  },
-  {
-    key: "archived",
-    label: "Archived",
-    status: ["rejected"],
-    mineCapable: false,
-  },
-];
-
-// "Triage" is conditionally added in the render based on triageCount —
-// it's noise when the bucket is empty, important when it isn't.
-const PRIMARY_FILTERS_BASE = FILTERS.filter(
-  (f) => f.key !== "archived" && f.key !== "triage",
-);
-const TRIAGE_FILTER = FILTERS.find((f) => f.key === "triage")!;
+  all: { title: "No invoices yet", body: "Everything you upload or receive by email shows up here." },
+};
 
 export function InvoiceQueue() {
-  const user = useUser();
-  const [filterKey, setFilterKey] = useState<FilterKey>("need_review");
+  const me = useMe();
+  const qbo = useQboStatus();
+  const qboConnected = qbo.data?.connected ?? false;
+  const [active, setActive] = useState<PillKey>("needs_review");
   const [q, setQ] = useState("");
-  const [job, setJob] = useState("");
-  const [mineOnly, setMineOnly] = useState(false);
-  const mySub = user?.id ?? null;
+  const [rejecting, setRejecting] = useState<Invoice | null>(null);
 
-  const filter = FILTERS.find((f) => f.key === filterKey) ?? FILTERS[0];
-  const showMineToggle = filter.mineCapable;
-  const effectiveMine = mineOnly && showMineToggle && !!mySub;
+  const pill = PILLS.find((p) => p.key === active) ?? PILLS[0];
 
-  // Compose the server-side query. The tab picks the assignment default;
-  // the Mine toggle overrides it.
-  const queryParams: ListParams = {
-    status: filter.status,
-    q: q || undefined,
-    job: job || undefined,
-    page_size: 100,
-    assigned: effectiveMine
-      ? "mine"
-      : filter.defaultAssigned ?? undefined,
+  // Lightweight count-only queries drive the pill badges.
+  const cNeed = useInvoices({ status: ACTIVE, assigned: "false", page_size: 1 });
+  const cMine = useInvoices({ status: ACTIVE, assigned: "mine", page_size: 1 });
+  const cPost = useInvoices({ status: ["approved"], page_size: 1 });
+  const cTriage = useInvoices({ status: ["needs_triage"], page_size: 1 });
+  const counts: Record<PillKey, number | undefined> = {
+    needs_review: cNeed.data?.total,
+    mine: cMine.data?.total,
+    ready_to_post: cPost.data?.total,
+    triage: cTriage.data?.total,
+    all: undefined,
   };
 
-  const { data, isLoading, error } = useInvoices(queryParams);
-
-  // Lightweight count-only query for the triage chip — pulls the total
-  // without the row payload. Polled at the same cadence as the main
-  // queue so the chip updates promptly when new triage rows land.
-  const { data: triageData } = useInvoices({
-    status: ["needs_triage"],
-    page_size: 1,
+  const { data, isLoading, error, refetch } = useInvoices({
+    ...pill.params,
+    q: q || undefined,
+    page_size: 100,
   });
-  const triageCount = triageData?.total ?? 0;
-
   const invoices = data?.invoices ?? [];
-  const empty = !isLoading && invoices.length === 0;
-
   const total = data?.total ?? 0;
 
-  // Reset Mine when switching to a tab that doesn't support it, otherwise
-  // it'd silently no-op.
-  const handleTabChange = (key: string) => {
-    const next = key as FilterKey;
-    setFilterKey(next);
-    const def = FILTERS.find((f) => f.key === next);
-    if (def && !def.mineCapable) setMineOnly(false);
-  };
-
-  const isArchived = filterKey === "archived";
-  const isTriage = filterKey === "triage";
-
-  // Build the chip set: primary tabs always; triage chip when there's
-  // actually something in triage OR we're already viewing it (so the
-  // chip doesn't disappear out from under the user).
-  const showTriageChip = triageCount > 0 || isTriage;
-  const chips: { key: FilterKey; label: string; count?: number }[] = [
-    ...PRIMARY_FILTERS_BASE.map((f) => ({ key: f.key, label: f.label })),
-  ];
-  if (showTriageChip) {
-    chips.push({
-      key: TRIAGE_FILTER.key,
-      label: TRIAGE_FILTER.label,
-      count: triageCount,
-    });
-  }
+  const chips = PILLS.map((p) => ({ key: p.key, label: p.label, count: counts[p.key] }));
+  const empty = q
+    ? { title: "No matches", body: `Nothing matches “${q}”. Try a different term.` }
+    : EMPTY[active];
 
   return (
-    <div className="space-y-6">
-      {/* Upload dropzone FIRST — primary action on this page */}
+    <div className="space-y-5">
       <UploadDropzone />
 
-      {/* Filter row */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div className="flex-1 min-w-0">
-            <FilterChips
-              chips={chips}
-              active={isArchived ? "" : filterKey}
-              onChange={handleTabChange}
-            />
-          </div>
-          {/* Mine toggle — only when meaningful */}
-          {showMineToggle && (
-            <button
-              type="button"
-              onClick={() => setMineOnly((v) => !v)}
-              disabled={!mySub}
-              title={mySub ? "Only show invoices assigned to you" : "Sign in to enable"}
-              aria-pressed={mineOnly}
-              className={cn(
-                "flex-shrink-0 inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors border",
-                mineOnly
-                  ? "bg-amber text-navy border-amber"
-                  : "bg-white text-slate-600 border-slate-300 hover:border-amber",
-                "disabled:opacity-50 disabled:cursor-not-allowed",
-              )}
-            >
-              <UserCircleIcon className="h-4 w-4" />
-              <span className="hidden sm:inline">Mine only</span>
-              <span className="sm:hidden">Mine</span>
-            </button>
-          )}
+      <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex-1 min-w-0">
+          <FilterChips chips={chips} active={active} onChange={setActive} />
         </div>
-
-        {/* Search + Job# inputs (hidden in archived view to keep it minimal) */}
-        {!isArchived && (
-          <div className="flex flex-col sm:flex-row gap-2">
-            <input
-              type="search"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search vendor, invoice #, PO…"
-              className={cn(
-                "block w-full sm:flex-1 min-h-[44px] md:min-h-0 px-3 py-2 text-base md:text-sm bg-white border border-slate-300",
-                "focus:outline-none focus:border-amber focus:ring-1 focus:ring-amber",
-              )}
-              aria-label="Search invoices"
-            />
-            <input
-              type="search"
-              value={job}
-              onChange={(e) => setJob(e.target.value)}
-              placeholder="Job #"
-              className={cn(
-                "block w-full sm:w-32 min-h-[44px] md:min-h-0 px-3 py-2 text-base md:text-sm font-mono bg-white border border-slate-300",
-                "focus:outline-none focus:border-amber focus:ring-1 focus:ring-amber",
-              )}
-              aria-label="Filter by job number"
-            />
-          </div>
-        )}
-
-        {/* Subdued archive link, right-aligned. Toggle in/out without
-            taking up the same visual weight as the primary chips. */}
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={() =>
-              setFilterKey(isArchived ? "need_review" : "archived")
-            }
-            className={cn(
-              "inline-flex items-center gap-1 text-xs uppercase tracking-wider font-semibold transition-colors min-h-[32px] px-2",
-              isArchived
-                ? "text-navy hover:text-amber"
-                : "text-slate-400 hover:text-navy",
-            )}
-            aria-pressed={isArchived}
-          >
-            {isArchived ? (
-              <>
-                <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
-                <span>Back to active</span>
-              </>
-            ) : (
-              <>
-                <ArchiveBoxIcon className="h-3.5 w-3.5" />
-                <span>Archived</span>
-              </>
-            )}
-          </button>
+        <div className="relative flex-shrink-0 w-40 sm:w-64">
+          <MagnifyingGlassIcon
+            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400"
+            aria-hidden
+          />
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search…"
+            aria-label="Search invoices"
+            className="block w-full h-9 pl-8 pr-3 text-sm bg-white border border-slate-300 focus:outline-none focus:border-amber focus:ring-1 focus:ring-amber"
+          />
         </div>
       </div>
 
-      {/* Results */}
-      <div className="bg-white border-t-4 border-amber">
-        {isLoading && <QueueSkeleton />}
-        {error && (
-          <div className="px-6 py-12 text-center text-red-700 text-sm">
-            Failed to load invoices: {(error as Error).message}
-          </div>
-        )}
-        {!isLoading && !error && empty && (
-          <EmptyState filterKey={filterKey} mineOnly={effectiveMine} />
-        )}
-        {!isLoading && !error && !empty && (
-          <>
-            {/* Mobile / tablet: stacked cards */}
-            <ul className="md:hidden divide-y divide-stone/60">
-              {invoices.map((inv) =>
-                isTriage ? (
-                  <TriageCard key={inv.id} invoice={inv} />
-                ) : (
-                  <InvoiceCard key={inv.id} invoice={inv} />
-                ),
-              )}
-            </ul>
-
-            {/* Desktop: full table.  Triage view uses a different column
-                shape — the queue's standard Job / Invoice # / Assignee
-                columns aren't useful there because the rows haven't
-                been fully accepted as invoices yet. We surface
-                reason + document type instead so AP can act fast. */}
-            {isTriage ? (
-              <table className="hidden md:table w-full">
-                <thead className="bg-stone/50">
-                  <tr className="border-b border-stone/60 text-xs font-bold uppercase tracking-widest text-amber">
-                    <th className="px-4 py-3 text-left">Received</th>
-                    <th className="px-4 py-3 text-left">Vendor / Sender</th>
-                    <th className="px-4 py-3 text-left">Reason</th>
-                    <th className="px-4 py-3 text-right">Amount</th>
-                    <th className="px-4 py-3" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoices.map((inv) => (
-                    <TriageRow key={inv.id} invoice={inv} />
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <table className="hidden md:table w-full">
-                <thead className="bg-stone/50">
-                  <tr className="border-b border-stone/60 text-xs font-bold uppercase tracking-widest text-amber">
-                    <th className="px-4 py-3 text-left">Received</th>
-                    <th className="px-4 py-3 text-left">Vendor</th>
-                    <th className="px-4 py-3 text-left">Job</th>
-                    <th className="px-4 py-3 text-left">Invoice #</th>
-                    <th className="px-4 py-3 text-right">Amount</th>
-                    <th className="px-4 py-3 text-left">Assignee</th>
-                    <th className="px-4 py-3 text-left">Status</th>
-                    <th className="px-4 py-3" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoices.map((inv) => (
-                    <InvoiceRow key={inv.id} invoice={inv} />
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </>
+      <Card accent="top">
+        {isLoading ? (
+          <LoadingState message="Loading invoices…" />
+        ) : error ? (
+          <ErrorState
+            title="Couldn't load invoices"
+            message={(error as Error).message}
+            onRetry={() => void refetch()}
+          />
+        ) : invoices.length === 0 ? (
+          <EmptyState Icon={InboxIcon} title={empty.title} body={empty.body} />
+        ) : (
+          <ul className="divide-y divide-stone/60">
+            {invoices.map((inv) => (
+              <QueueRow
+                key={inv.id}
+                invoice={inv}
+                me={me.data ?? null}
+                qboConnected={qboConnected}
+                onReject={setRejecting}
+              />
+            ))}
+          </ul>
         )}
         {data && total > invoices.length && (
           <div className="px-4 py-3 text-xs text-slate-500 border-t border-stone/60">
-            Showing {invoices.length} of {total}
+            Showing {invoices.length} of {total} — refine with search.
           </div>
         )}
-      </div>
+      </Card>
+
+      {rejecting && <QueueRejectModal invoice={rejecting} onClose={() => setRejecting(null)} />}
     </div>
   );
-}
-
-function QueueSkeleton() {
-  return (
-    <div className="p-2">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div
-          key={i}
-          className="flex items-center gap-4 px-2 py-3 border-b border-stone/40 last:border-none animate-pulse"
-        >
-          <div className="h-4 w-20 bg-stone/60" />
-          <div className="flex-1 h-4 bg-stone/60 max-w-[40%]" />
-          <div className="h-4 w-24 bg-stone/60" />
-          <div className="h-4 w-20 bg-stone/60" />
-          <div className="h-4 w-16 bg-stone/60" />
-          <div className="h-4 w-20 bg-stone/60" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function EmptyState({
-  filterKey,
-  mineOnly,
-}: {
-  filterKey: FilterKey;
-  mineOnly: boolean;
-}) {
-  const copy: Record<
-    FilterKey,
-    {
-      title: string;
-      body: string;
-      Icon: typeof InboxIcon;
-    }
-  > = {
-    need_review: {
-      title: "Inbox is clear",
-      body: "Nothing waiting to be picked up. Upload a PDF above, or have a vendor email it to your inbound address.",
-      Icon: InboxIcon,
-    },
-    assigned: {
-      title: "Nothing in flight",
-      body: "Once someone picks up an invoice, it shows here while they work on it.",
-      Icon: UsersIcon,
-    },
-    approved: {
-      title: "Nothing approved yet",
-      body: "Approved and posted invoices live here. Each row tells you whether it's already in QuickBooks.",
-      Icon: CheckCircleIcon,
-    },
-    triage: {
-      title: "Nothing needs triage",
-      body: "Documents that aren't confidently invoices land here. We'll route statements, quotes, encrypted PDFs, and other ambiguous email content for your review.",
-      Icon: ExclamationTriangleIcon,
-    },
-    archived: {
-      title: "Archive is empty",
-      body: "Rejected invoices are kept here for the audit trail.",
-      Icon: ArchiveBoxIcon,
-    },
-  };
-  const base = copy[filterKey];
-  const title = mineOnly ? "Nothing assigned to you" : base.title;
-  const body = mineOnly
-    ? "Turn off Mine only to see the full team's work."
-    : base.body;
-  return <UiEmptyState Icon={base.Icon} title={title} body={body} />;
 }
