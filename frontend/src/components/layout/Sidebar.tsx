@@ -5,6 +5,7 @@ import {
   DocumentTextIcon,
   ClockIcon,
   Cog6ToothIcon,
+  SparklesIcon,
   UsersIcon,
   ArrowRightOnRectangleIcon,
 } from "@heroicons/react/24/outline";
@@ -20,6 +21,7 @@ import {
   INVOICE_VIEWS,
   isInvoiceView,
 } from "@/lib/invoiceViews";
+import { CURRENT_VERSION, releaseSeen } from "@/lib/releases";
 
 interface NavItem {
   to: string;
@@ -45,6 +47,11 @@ export function Sidebar() {
   // Only admins+ get the access-requests query (others would 403)
   const reqQuery = useAccessRequests({ enabled: canManage });
   const pendingCount = reqQuery.data?.pending_count ?? 0;
+
+  // "What's new" badge: shown until the user opens the page. The page persists
+  // "seen" on mount; hiding it on /whats-new clears the badge instantly, and it
+  // stays cleared afterward because releaseSeen() is then true.
+  const releaseUnseen = !releaseSeen() && pathname !== "/whats-new";
 
   // While on Settings, expand a jump-nav of the page's sections. The "sync"
   // section only exists once QuickBooks is connected.
@@ -194,10 +201,33 @@ export function Sidebar() {
           </ul>
         </nav>
 
+        {/* What's new — a deliberate callout, accented so it's easy to spot. */}
+        <div className="px-3 pb-2">
+          <Link
+            to="/whats-new"
+            className={cn(
+              "flex items-center justify-between gap-2 px-3 py-2 border transition-colors",
+              pathname === "/whats-new"
+                ? "border-amber bg-amber/20 text-stone"
+                : "border-amber/40 bg-amber/10 text-stone hover:bg-amber/20",
+            )}
+          >
+            <span className="inline-flex items-center gap-2 text-sm font-semibold">
+              <SparklesIcon className="h-4 w-4 flex-shrink-0 text-amber" />
+              What's new
+            </span>
+            {releaseUnseen && (
+              <span className="bg-amber text-navy text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5">
+                New
+              </span>
+            )}
+          </Link>
+        </div>
+
         <AccountCard />
 
         <div className="px-6 py-3 text-[11px] text-slate-500 border-t border-stone/10">
-          <div className="font-mono">v0.2.0</div>
+          <div className="font-mono">v{CURRENT_VERSION}</div>
         </div>
       </div>
     </aside>

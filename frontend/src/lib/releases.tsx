@@ -1,0 +1,125 @@
+/**
+ * Release history for the in-app "What's new" page. Each release is a plain,
+ * user-facing description of what changed — features people can see and get
+ * excited about, not code changes. Add a new object at the top of RELEASES
+ * for each version; the page and the sidebar "new" badge follow automatically.
+ */
+import type { ComponentType, SVGProps } from "react";
+import {
+  ArrowUpTrayIcon,
+  BellIcon,
+  BookmarkIcon,
+  CheckBadgeIcon,
+  ClockIcon,
+  Cog6ToothIcon,
+  DocumentTextIcon,
+  InboxIcon,
+} from "@heroicons/react/24/outline";
+
+type Icon = ComponentType<SVGProps<SVGSVGElement>>;
+
+export interface ReleaseItem {
+  Icon: Icon;
+  title: string;
+  body: string;
+}
+
+export interface ReleaseSection {
+  kind: "new" | "improved";
+  items: ReleaseItem[];
+}
+
+export interface Release {
+  version: string;
+  /** Human date, e.g. "June 24, 2026". */
+  date: string;
+  /** The one headline change. */
+  headline: string;
+  /** One-line intro. */
+  summary: string;
+  sections: ReleaseSection[];
+}
+
+export const RELEASES: Release[] = [
+  {
+    version: "0.2.0",
+    date: "June 24, 2026",
+    headline: "Your invoice queue becomes a work inbox",
+    summary:
+      "The biggest update yet — the queue and review pages are rebuilt around getting work done, with a clearer workflow, a readable activity log, and email notifications.",
+    sections: [
+      {
+        kind: "new",
+        items: [
+          {
+            Icon: InboxIcon,
+            title: "Your queue is now a work inbox",
+            body: "Filter pills show exactly what needs you — Needs review, Assigned to me, Ready to post, Triage — each with a live count. Every invoice carries its next action right in the row, so you can claim, review, post, or reject without opening each one.",
+          },
+          {
+            Icon: CheckBadgeIcon,
+            title: "Approve without the assign dance",
+            body: "Admins can review and approve any invoice directly, or hand one off to a teammate. Team members see what's assigned to them and claim it — so everyone can tell at a glance who has picked up what.",
+          },
+          {
+            Icon: ClockIcon,
+            title: "A plain-English activity log",
+            body: "The audit log is now Activity: readable lines like “Brandon approved Acme Supply #INV-1042 · 2 hours ago,” grouped by day and filterable by person or activity. Flip on Detailed when you need the technical specifics.",
+          },
+          {
+            Icon: BellIcon,
+            title: "Email notifications",
+            body: "Reviewers get an email the moment an invoice is assigned to them, a daily 7:30 digest of everything still waiting, and admins can send a manual nudge to anyone on the team.",
+          },
+        ],
+      },
+      {
+        kind: "improved",
+        items: [
+          {
+            Icon: DocumentTextIcon,
+            title: "A calmer review page",
+            body: "One header now shows the vendor, invoice number, total, status, and assignee, so the PDF and the coding fields stay front and center. It updates live as you type.",
+          },
+          {
+            Icon: ArrowUpTrayIcon,
+            title: "Upload stays out of the way",
+            body: "Drag a PDF anywhere onto the queue, or use the Upload button. The big dropzone that used to hog the top of the page is gone.",
+          },
+          {
+            Icon: Cog6ToothIcon,
+            title: "Easier settings",
+            body: "Each section has an icon, and the sidebar shows a jump-nav while you're in Settings so you can hop straight to QuickBooks, Notifications, or AP coding.",
+          },
+          {
+            Icon: BookmarkIcon,
+            title: "Bookmarkable views",
+            body: "Your queue filter now lives in the page address, so you can bookmark or share a specific view.",
+          },
+        ],
+      },
+    ],
+  },
+];
+
+export const CURRENT_VERSION = RELEASES[0].version;
+
+const SEEN_KEY = "cbg:seenReleaseVersion";
+
+/** Has the user already seen the latest release? Defaults to "yes" if storage
+ *  is unavailable, so we never nag with a broken badge. */
+export function releaseSeen(): boolean {
+  try {
+    return localStorage.getItem(SEEN_KEY) === CURRENT_VERSION;
+  } catch {
+    return true;
+  }
+}
+
+export function markReleaseSeen(): void {
+  try {
+    localStorage.setItem(SEEN_KEY, CURRENT_VERSION);
+  } catch {
+    /* ignore */
+  }
+}

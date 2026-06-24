@@ -15,6 +15,7 @@ import { Route as EulaRouteImport } from './routes/eula'
 import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthedWhatsNewRouteImport } from './routes/_authed.whats-new'
 import { Route as AuthedTeamRouteImport } from './routes/_authed.team'
 import { Route as AuthedSettingsRouteImport } from './routes/_authed.settings'
 import { Route as AuthedQuickbooksRouteImport } from './routes/_authed.quickbooks'
@@ -50,6 +51,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthedWhatsNewRoute = AuthedWhatsNewRouteImport.update({
+  id: '/whats-new',
+  path: '/whats-new',
+  getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedTeamRoute = AuthedTeamRouteImport.update({
   id: '/team',
@@ -93,6 +99,7 @@ export interface FileRoutesByFullPath {
   '/quickbooks': typeof AuthedQuickbooksRoute
   '/settings': typeof AuthedSettingsRoute
   '/team': typeof AuthedTeamRoute
+  '/whats-new': typeof AuthedWhatsNewRoute
   '/invoices/$id': typeof AuthedInvoicesIdRoute
 }
 export interface FileRoutesByTo {
@@ -106,6 +113,7 @@ export interface FileRoutesByTo {
   '/quickbooks': typeof AuthedQuickbooksRoute
   '/settings': typeof AuthedSettingsRoute
   '/team': typeof AuthedTeamRoute
+  '/whats-new': typeof AuthedWhatsNewRoute
   '/invoices/$id': typeof AuthedInvoicesIdRoute
 }
 export interface FileRoutesById {
@@ -121,6 +129,7 @@ export interface FileRoutesById {
   '/_authed/quickbooks': typeof AuthedQuickbooksRoute
   '/_authed/settings': typeof AuthedSettingsRoute
   '/_authed/team': typeof AuthedTeamRoute
+  '/_authed/whats-new': typeof AuthedWhatsNewRoute
   '/_authed/invoices_/$id': typeof AuthedInvoicesIdRoute
 }
 export interface FileRouteTypes {
@@ -136,6 +145,7 @@ export interface FileRouteTypes {
     | '/quickbooks'
     | '/settings'
     | '/team'
+    | '/whats-new'
     | '/invoices/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -149,6 +159,7 @@ export interface FileRouteTypes {
     | '/quickbooks'
     | '/settings'
     | '/team'
+    | '/whats-new'
     | '/invoices/$id'
   id:
     | '__root__'
@@ -163,6 +174,7 @@ export interface FileRouteTypes {
     | '/_authed/quickbooks'
     | '/_authed/settings'
     | '/_authed/team'
+    | '/_authed/whats-new'
     | '/_authed/invoices_/$id'
   fileRoutesById: FileRoutesById
 }
@@ -219,6 +231,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authed/whats-new': {
+      id: '/_authed/whats-new'
+      path: '/whats-new'
+      fullPath: '/whats-new'
+      preLoaderRoute: typeof AuthedWhatsNewRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/team': {
       id: '/_authed/team'
       path: '/team'
@@ -270,6 +289,7 @@ interface AuthedRouteChildren {
   AuthedQuickbooksRoute: typeof AuthedQuickbooksRoute
   AuthedSettingsRoute: typeof AuthedSettingsRoute
   AuthedTeamRoute: typeof AuthedTeamRoute
+  AuthedWhatsNewRoute: typeof AuthedWhatsNewRoute
   AuthedInvoicesIdRoute: typeof AuthedInvoicesIdRoute
 }
 
@@ -279,6 +299,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedQuickbooksRoute: AuthedQuickbooksRoute,
   AuthedSettingsRoute: AuthedSettingsRoute,
   AuthedTeamRoute: AuthedTeamRoute,
+  AuthedWhatsNewRoute: AuthedWhatsNewRoute,
   AuthedInvoicesIdRoute: AuthedInvoicesIdRoute,
 }
 

@@ -14,12 +14,14 @@ import {
   ArrowRightOnRectangleIcon,
   ClockIcon,
   Cog6ToothIcon,
+  SparklesIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import type { ComponentType, SVGProps } from "react";
 import { cn } from "@/lib/cn";
 import { postSignOutUri, useUser } from "@/lib/auth";
 import { useMe } from "@/lib/users";
+import { releaseSeen } from "@/lib/releases";
 
 interface MoreLink {
   to: string;
@@ -29,6 +31,12 @@ interface MoreLink {
 }
 
 const MORE_LINKS: MoreLink[] = [
+  {
+    to: "/whats-new",
+    label: "What's new",
+    Icon: SparklesIcon,
+    description: "The latest features in the portal, explained.",
+  },
   {
     to: "/audit",
     label: "Activity",
@@ -86,6 +94,7 @@ export function MoreSheet({
   const name = user?.name?.trim() || user?.email || "Signed in";
   const email = user?.email ?? null;
   const initials = computeInitials(name, email);
+  const releaseUnseen = !releaseSeen();
 
   return (
     <AnimatePresence>
@@ -186,6 +195,11 @@ export function MoreSheet({
                           </div>
                         )}
                       </div>
+                      {to === "/whats-new" && releaseUnseen && (
+                        <span className="bg-amber text-navy text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 flex-shrink-0">
+                          New
+                        </span>
+                      )}
                       <span
                         aria-hidden
                         className="text-slate-300 text-xl leading-none"
