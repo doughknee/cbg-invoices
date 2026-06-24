@@ -467,7 +467,7 @@ function InvoiceDetailPage() {
                 setStampPosition(null);
                 patch.mutate({ stamp_position: null });
               }}
-              className="absolute bottom-3 right-3 z-30 text-[10px] uppercase tracking-wider font-bold bg-white/95 text-navy hover:bg-amber px-2 py-1 border border-navy shadow"
+              className="absolute bottom-3 right-3 z-[15] text-[10px] uppercase tracking-wider font-bold bg-white/95 text-navy hover:bg-amber px-2 py-1 border border-navy shadow"
             >
               Reset stamp
             </button>
