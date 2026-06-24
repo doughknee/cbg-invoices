@@ -197,7 +197,7 @@ export function Sidebar() {
         <AccountCard />
 
         <div className="px-6 py-3 text-[11px] text-slate-500 border-t border-stone/10">
-          <div className="font-mono">v0.1.0</div>
+          <div className="font-mono">v0.2.0</div>
         </div>
       </div>
     </aside>
