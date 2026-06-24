@@ -31,7 +31,14 @@ from app.schemas.invoice import (
     InvoicePatch,
     RejectInvoiceRequest,
 )
-from app.services import audit, extraction, logto_admin, storage, trusted_domains
+from app.services import (
+    assignment_notify,
+    audit,
+    extraction,
+    logto_admin,
+    storage,
+    trusted_domains,
+)
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["invoices"])
@@ -549,12 +556,14 @@ async def assign_invoice(
     body: AssignInvoiceRequest,
     user: Annotated[CurrentUser, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    background: BackgroundTasks,
 ):
     await _require_assignment_manager(user)
     invoice = await session.get(Invoice, invoice_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
+    previous_assignee_id = invoice.assigned_to_id
     invoice.assigned_to_id = body.user_id
     invoice.assigned_to_email = body.user_email
     invoice.assigned_to_name = body.user_name
@@ -568,6 +577,23 @@ async def assign_invoice(
         message=body.user_email or body.user_id,
     )
     await session.commit()
+
+    # Best-effort email to the new assignee — only when the assignment actually
+    # changed to someone other than the person doing the assigning.
+    if assignment_notify.should_notify(
+        new_assignee_id=body.user_id,
+        previous_assignee_id=previous_assignee_id,
+        actor_id=user.id,
+        to_email=body.user_email,
+    ):
+        background.add_task(
+            assignment_notify.notify_assignment,
+            invoice_id=invoice_id,
+            to_email=body.user_email,
+            to_name=body.user_name,
+            actor_label=user.email or user.name or "A teammate",
+        )
+
     return await _detail_with_pdf(invoice)
 
 
