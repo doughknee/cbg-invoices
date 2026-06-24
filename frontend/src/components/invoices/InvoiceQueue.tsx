@@ -1,11 +1,16 @@
-import { useState } from "react";
-import { InboxIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { useCallback, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { ArrowUpTrayIcon, InboxIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { PageHeader } from "@/components/layout/AppShell";
+import { useMobileAppBar } from "@/components/layout/MobileAppBar";
 import { useMe } from "@/lib/users";
 import { useInvoices, type ListParams } from "@/lib/invoices";
 import { useQboStatus } from "@/lib/qbo";
+import { useUploadQueue } from "@/lib/upload";
 import type { Invoice, InvoiceStatus } from "@/types";
 import { QueueRejectModal, QueueRow } from "./QueueRow";
-import { UploadDropzone } from "./UploadDropzone";
+import { UploadDropOverlay, UploadTaskCard } from "./UploadTasks";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -15,7 +20,8 @@ import { FilterChips } from "@/components/ui/FilterChips";
 /**
  * The queue is a work inbox, not a tour of workflow stages. The filter pills
  * answer "what needs me?" — and every row carries its own next action, so the
- * detail page is for careful review, not routine clicks.
+ * detail page is for careful review, not routine clicks. Upload is a secondary
+ * action (header button + drag-anywhere), not a permanent box hogging the top.
  */
 const ACTIVE: InvoiceStatus[] = ["ready_for_review", "extraction_failed", "received", "extracting"];
 
@@ -38,7 +44,7 @@ const PILLS: Pill[] = [
 const EMPTY: Record<PillKey, { title: string; body: string }> = {
   needs_review: {
     title: "Inbox is clear",
-    body: "Nothing waiting to be picked up. Upload a PDF above, or have a vendor email your inbound address.",
+    body: "Nothing waiting to be picked up. Drop a PDF anywhere, or have a vendor email your inbound address.",
   },
   mine: { title: "Nothing assigned to you", body: "Invoices assigned to you show up here." },
   ready_to_post: {
@@ -59,6 +65,34 @@ export function InvoiceQueue() {
   const [active, setActive] = useState<PillKey>("needs_review");
   const [q, setQ] = useState("");
   const [rejecting, setRejecting] = useState<Invoice | null>(null);
+
+  // ── Upload: a secondary action, not a permanent dropzone ──────────────────
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const { tasks, enqueue, dismiss } = useUploadQueue();
+  const hasActiveUpload = tasks.some((t) => t.stage.kind !== "done" && t.stage.kind !== "error");
+
+  const openPicker = useCallback(() => fileInput.current?.click(), []);
+  function onFileChange(e: ChangeEvent<HTMLInputElement>) {
+    enqueue(Array.from(e.target.files ?? []));
+    e.target.value = "";
+  }
+
+  // Memoized so the mobile-app-bar effect doesn't re-fire every render.
+  const mobileUploadAction = useMemo(
+    () => (
+      <button
+        type="button"
+        onClick={openPicker}
+        className="inline-flex items-center gap-1.5 min-h-[36px] px-2 text-xs font-bold uppercase tracking-wider text-navy hover:text-amber"
+      >
+        <ArrowUpTrayIcon className="h-4 w-4" aria-hidden />
+        Upload
+      </button>
+    ),
+    [openPicker],
+  );
+  useMobileAppBar({ title: "Invoices", action: mobileUploadAction });
 
   const pill = PILLS.find((p) => p.key === active) ?? PILLS[0];
 
@@ -87,10 +121,44 @@ export function InvoiceQueue() {
   const empty = q
     ? { title: "No matches", body: `Nothing matches “${q}”. Try a different term.` }
     : EMPTY[active];
+  const emptyCta =
+    !q && (active === "needs_review" || active === "all") ? (
+      <Button variant="secondary" size="sm" onClick={openPicker}>
+        <ArrowUpTrayIcon className="h-4 w-4" aria-hidden />
+        Upload a PDF
+      </Button>
+    ) : undefined;
+
+  const uploadButton = (
+    <Button variant="secondary" size="sm" onClick={openPicker} loading={hasActiveUpload}>
+      <ArrowUpTrayIcon className="h-4 w-4" aria-hidden />
+      Upload PDF
+    </Button>
+  );
 
   return (
-    <div className="space-y-5">
-      <UploadDropzone />
+    <div
+      className="relative space-y-5"
+      onDragEnter={(e) => {
+        if (e.dataTransfer?.types?.includes("Files")) {
+          e.preventDefault();
+          setDragOver(true);
+        }
+      }}
+      onDragOver={(e) => {
+        if (dragOver) e.preventDefault();
+      }}
+    >
+      <input
+        ref={fileInput}
+        type="file"
+        accept="application/pdf"
+        multiple
+        className="sr-only"
+        onChange={onFileChange}
+      />
+
+      <PageHeader title="Invoices" actions={uploadButton} />
 
       <div className="flex items-center gap-2 sm:gap-3">
         <div className="flex-1 min-w-0">
@@ -112,6 +180,21 @@ export function InvoiceQueue() {
         </div>
       </div>
 
+      <AnimatePresence>
+        {tasks.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            className="space-y-2"
+          >
+            {tasks.map((t) => (
+              <UploadTaskCard key={t.id} task={t} onDismiss={() => dismiss(t.id)} />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <Card accent="top">
         {isLoading ? (
           <LoadingState message="Loading invoices…" />
@@ -122,7 +205,7 @@ export function InvoiceQueue() {
             onRetry={() => void refetch()}
           />
         ) : invoices.length === 0 ? (
-          <EmptyState Icon={InboxIcon} title={empty.title} body={empty.body} />
+          <EmptyState Icon={InboxIcon} title={empty.title} body={empty.body} cta={emptyCta} />
         ) : (
           <ul className="divide-y divide-stone/60">
             {invoices.map((inv) => (
@@ -142,6 +225,12 @@ export function InvoiceQueue() {
           </div>
         )}
       </Card>
+
+      <AnimatePresence>
+        {dragOver && (
+          <UploadDropOverlay onDrop={enqueue} onLeave={() => setDragOver(false)} />
+        )}
+      </AnimatePresence>
 
       {rejecting && <QueueRejectModal invoice={rejecting} onClose={() => setRejecting(null)} />}
     </div>

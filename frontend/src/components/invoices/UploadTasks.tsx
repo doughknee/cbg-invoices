@@ -1,127 +1,63 @@
-import { useRef, useState, type ChangeEvent, type DragEvent } from "react";
+/**
+ * Upload presentation pieces.
+ *
+ * Upload is a secondary action on the queue, so there's no permanent
+ * dropzone taking up the top of the page. Instead:
+ *   - `UploadDropOverlay` appears only while a file is dragged over the queue.
+ *   - `UploadTaskCard` renders progress inline, above the list, while a file
+ *     is uploading / extracting, then auto-clears.
+ *
+ * The owning component holds the upload queue state (`useUploadQueue`) and
+ * the hidden file input; these are dumb, presentational.
+ */
 import { Link } from "@tanstack/react-router";
-import { motion, AnimatePresence } from "motion/react";
+import { motion } from "motion/react";
 import {
-  DocumentArrowUpIcon,
   CheckCircleIcon,
+  DocumentArrowUpIcon,
   ExclamationTriangleIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
-import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
-import {
-  extractionMessageAt,
-  useUploadQueue,
-  type UploadStage,
-  type UploadTask,
-} from "@/lib/upload";
+import { extractionMessageAt, type UploadStage, type UploadTask } from "@/lib/upload";
 
-export function UploadDropzone() {
-  const fileInput = useRef<HTMLInputElement>(null);
-  const [dragOver, setDragOver] = useState(false);
-  const { tasks, enqueue, dismiss } = useUploadQueue();
-
-  function onDrop(e: DragEvent<HTMLDivElement>) {
-    e.preventDefault();
-    setDragOver(false);
-    enqueue(Array.from(e.dataTransfer.files));
-  }
-
-  function onChange(e: ChangeEvent<HTMLInputElement>) {
-    enqueue(Array.from(e.target.files ?? []));
-    e.target.value = "";
-  }
-
-  const hasActive = tasks.some(
-    (t) => t.stage.kind !== "done" && t.stage.kind !== "error",
-  );
-
+/** Full-bleed overlay shown while a PDF is dragged over the queue. */
+export function UploadDropOverlay({
+  onDrop,
+  onLeave,
+}: {
+  onDrop: (files: File[]) => void;
+  onLeave: () => void;
+}) {
   return (
-    <div className="space-y-3">
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={onDrop}
-        onClick={() => fileInput.current?.click()}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            fileInput.current?.click();
-          }
-        }}
-        className={cn(
-          "relative border-2 border-dashed p-5 sm:p-6 text-center transition-colors cursor-pointer",
-          "focus:outline-none focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-2",
-          dragOver ? "border-amber bg-amber/5" : "border-slate-300 bg-white hover:border-amber/60",
-        )}
-      >
-        <input
-          ref={fileInput}
-          type="file"
-          accept="application/pdf"
-          className="sr-only"
-          onChange={onChange}
-          multiple
-        />
-        <DocumentArrowUpIcon
-          className="mx-auto h-10 w-10 sm:h-9 sm:w-9 text-amber/70"
-          aria-hidden
-        />
-        <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-center gap-2">
-          <p className="text-sm sm:text-base text-graphite">
-            <span className="font-semibold text-navy hidden sm:inline">
-              Drop a PDF here
-            </span>
-            <span className="font-semibold text-navy sm:hidden">Tap to upload</span>{" "}
-            <span className="hidden sm:inline">or</span>
-          </p>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              fileInput.current?.click();
-            }}
-            loading={hasActive}
-            className="hidden sm:inline-flex"
-          >
-            Choose file
-          </Button>
-        </div>
-        <p className="mt-2 text-xs text-slate-500 max-w-xs mx-auto">
-          We'll extract the fields automatically. You'll review before posting
-          to QBO.
-        </p>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.12 }}
+      onDragOver={(e) => e.preventDefault()}
+      onDragLeave={onLeave}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDrop(Array.from(e.dataTransfer.files));
+        onLeave();
+      }}
+      className="absolute inset-0 z-40 flex items-center justify-center border-2 border-dashed border-amber bg-stone/85 backdrop-blur-sm"
+    >
+      <div className="text-center pointer-events-none">
+        <DocumentArrowUpIcon className="mx-auto h-12 w-12 text-amber" aria-hidden />
+        <p className="mt-3 font-display text-2xl text-navy">Drop to upload</p>
+        <p className="mt-1 text-xs text-slate-500">PDF invoices only</p>
       </div>
-
-      <AnimatePresence>
-        {tasks.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            className="space-y-2"
-          >
-            {tasks.map((task) => (
-              <UploadTaskCard key={task.id} task={task} onDismiss={() => dismiss(task.id)} />
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+    </motion.div>
   );
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Task card
+// Progress card
 // ──────────────────────────────────────────────────────────────────────────
 
-function UploadTaskCard({
+export function UploadTaskCard({
   task,
   onDismiss,
 }: {
