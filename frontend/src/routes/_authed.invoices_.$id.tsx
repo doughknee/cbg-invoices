@@ -29,6 +29,7 @@ import { ExtractedFieldsForm } from "@/components/invoices/ExtractedFieldsForm";
 import { StampPreviewOverlay, type StampPosition } from "@/components/invoices/StampPreview";
 import { InvoiceSummary } from "@/components/invoices/InvoiceSummary";
 import { AssigneePicker } from "@/components/invoices/AssigneePicker";
+import { NotifyModal } from "@/components/invoices/NotifyModal";
 import {
   useApproveAndPostInvoice,
   useApproveInvoice,
@@ -129,6 +130,7 @@ function InvoiceDetailPage() {
 
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectModal, setShowRejectModal] = useState(false);
+  const [showNotify, setShowNotify] = useState(false);
 
   // Assignment modals — one flow per action that needs an assignee.
   const [assignFlow, setAssignFlow] = useState<
@@ -421,6 +423,13 @@ function InvoiceDetailPage() {
               >
                 Remove
               </button>
+              <button
+                type="button"
+                onClick={() => setShowNotify(true)}
+                className="text-slate-400 hover:text-navy"
+              >
+                Notify
+              </button>
             </>
           )}
         </div>
@@ -596,6 +605,12 @@ function InvoiceDetailPage() {
         loading={busy}
         onClose={() => setAssignFlow(null)}
         onSelect={onPickerSelect}
+      />
+
+      <NotifyModal
+        open={showNotify}
+        invoice={invoice}
+        onClose={() => setShowNotify(false)}
       />
     </>
   );
