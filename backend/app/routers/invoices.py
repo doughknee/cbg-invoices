@@ -340,6 +340,27 @@ def _ensure_can_reject(invoice: Invoice, user: CurrentUser) -> None:
         )
 
 
+def _ensure_amounts_nonnegative(invoice: Invoice) -> None:
+    """Reject negative money. ``_ensure_approvable``'s ``not total_cents`` test
+    only catches a missing or zero total — a negative value is truthy and would
+    otherwise sail through and post a negative bill to QBO.
+    """
+    negative = [
+        name
+        for name, cents in (
+            ("total", invoice.total_cents),
+            ("subtotal", invoice.subtotal_cents),
+            ("tax", invoice.tax_cents),
+        )
+        if cents is not None and cents < 0
+    ]
+    if negative:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Amounts can't be negative: {', '.join(negative)}.",
+        )
+
+
 def _ensure_approvable(invoice: Invoice) -> None:
     """Raise 4xx if the invoice isn't in a state that can be approved."""
     if invoice.status == InvoiceStatus.POSTED_TO_QBO:
@@ -350,6 +371,7 @@ def _ensure_approvable(invoice: Invoice) -> None:
         raise HTTPException(status_code=400, detail="Vendor is required before approval")
     if not invoice.total_cents:
         raise HTTPException(status_code=400, detail="Total amount is required before approval")
+    _ensure_amounts_nonnegative(invoice)
 
 
 def _ensure_postable(invoice: Invoice) -> None:
@@ -360,6 +382,7 @@ def _ensure_postable(invoice: Invoice) -> None:
     otherwise. Approval doesn't require these (you can approve a vendor +
     total without coding), but posting does.
     """
+    _ensure_amounts_nonnegative(invoice)
     missing = []
     if not (invoice.job_number or "").strip():
         missing.append("job number")
