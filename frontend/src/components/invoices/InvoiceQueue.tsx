@@ -160,26 +160,6 @@ export function InvoiceQueue() {
 
       <PageHeader title="Invoices" actions={uploadButton} />
 
-      <div className="flex items-center gap-2 sm:gap-3">
-        <div className="flex-1 min-w-0">
-          <FilterChips chips={chips} active={active} onChange={setActive} />
-        </div>
-        <div className="relative flex-shrink-0 w-40 sm:w-64">
-          <MagnifyingGlassIcon
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400"
-            aria-hidden
-          />
-          <input
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search…"
-            aria-label="Search invoices"
-            className="block w-full h-9 pl-8 pr-3 text-sm bg-white border border-slate-300 focus:outline-none focus:border-amber focus:ring-1 focus:ring-amber"
-          />
-        </div>
-      </div>
-
       <AnimatePresence>
         {tasks.length > 0 && (
           <motion.div
@@ -196,6 +176,26 @@ export function InvoiceQueue() {
       </AnimatePresence>
 
       <Card accent="top">
+        {/* Controls live in the card header so the list reads as one anchored
+            panel — no thin filter row floating in empty page background. */}
+        <div className="px-4 py-3 border-b border-stone/60 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <FilterChips chips={chips} active={active} onChange={setActive} />
+          <div className="relative flex-shrink-0 sm:w-64">
+            <MagnifyingGlassIcon
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400"
+              aria-hidden
+            />
+            <input
+              type="search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search…"
+              aria-label="Search invoices"
+              className="block w-full h-9 pl-8 pr-3 text-sm bg-stone/50 border border-slate-300 text-graphite focus:outline-none focus:border-amber focus:ring-1 focus:ring-amber placeholder:text-slate-400"
+            />
+          </div>
+        </div>
+
         {isLoading ? (
           <LoadingState message="Loading invoices…" />
         ) : error ? (
