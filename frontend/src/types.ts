@@ -153,6 +153,8 @@ export interface AuditLogEntry {
   actor_id: string;
   actor_email: string | null;
   invoice_id: string | null;
+  invoice_vendor_name: string | null;
+  invoice_number: string | null;
   action: string;
   before: Record<string, unknown> | null;
   after: Record<string, unknown> | null;

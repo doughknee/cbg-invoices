@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_session
 from app.deps import CurrentUser, get_current_user
 from app.models.audit_log import AuditLog
+from app.models.invoice import Invoice
 from app.schemas.audit import AuditLogListResponse, AuditLogOut
 
 router = APIRouter(tags=["audit"])
@@ -26,7 +27,11 @@ async def list_audit(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ):
-    stmt = select(AuditLog)
+    # Outer-join the invoice so we can label entries with vendor + number
+    # instead of a raw id. SET NULL on delete means the join may be empty.
+    stmt = select(AuditLog, Invoice.vendor_name, Invoice.invoice_number).outerjoin(
+        Invoice, AuditLog.invoice_id == Invoice.id
+    )
     count_stmt = select(func.count(AuditLog.id))
 
     if invoice_id:
@@ -45,9 +50,17 @@ async def list_audit(
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
-    rows = (await session.execute(stmt)).scalars().all()
+    rows = (await session.execute(stmt)).all()
+
+    logs: list[AuditLogOut] = []
+    for entry, vendor_name, invoice_number in rows:
+        item = AuditLogOut.model_validate(entry)
+        item.invoice_vendor_name = vendor_name
+        item.invoice_number = invoice_number
+        logs.append(item)
+
     return AuditLogListResponse(
-        logs=[AuditLogOut.model_validate(r) for r in rows],
+        logs=logs,
         total=total,
         page=page,
         page_size=page_size,
