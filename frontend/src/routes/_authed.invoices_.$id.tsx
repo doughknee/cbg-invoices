@@ -300,6 +300,7 @@ function InvoiceDetailPage() {
       setAssignFlow(null);
       return;
     }
+    await flushDirty();
     await assign.mutateAsync({
       user_id: member.id,
       user_email: member.email,
@@ -323,6 +324,7 @@ function InvoiceDetailPage() {
       setAssignFlow(null);
       return;
     }
+    await flushDirty();
     await assign.mutateAsync({
       user_id: member.id,
       user_email: member.email,
@@ -943,7 +945,32 @@ function ActionFooter(props: FooterProps) {
   const canAct = isAdmin || (isAssignee && isClaimed);
   const mustClaim = !isAdmin && isAssignee && !isClaimed;
 
-  // Pick the primary action based on status + role.
+  const approveOption: SplitButtonOption = {
+    label: "Approve",
+    description: "Mark reviewed — doesn't post to QBO",
+    onSelect: onApprove,
+    icon: <CheckCircleIcon className="h-4 w-4" />,
+  };
+  const approveAndPostOption: SplitButtonOption = {
+    label: "Approve & Post to QBO",
+    description: qboConnected
+      ? "Sends to QuickBooks immediately"
+      : "Connect QuickBooks in Settings first",
+    onSelect: onApproveAndPost,
+    disabled: !qboConnected,
+    icon: <PaperAirplaneIcon className="h-4 w-4" />,
+  };
+  const assignOption: SplitButtonOption = {
+    label: invoice.assigned_to_id ? "Reassign…" : "Assign to teammate…",
+    description: "Hand off to a team member to review",
+    onSelect: onAssign,
+    icon: <UserPlusIcon className="h-4 w-4" />,
+  };
+
+  // Pick the primary action based on status + role:
+  //   - The assignee reviewing their own invoice → Approve is the headline.
+  //   - An admin looking at an unassigned / someone-else's invoice → Assign by
+  //     default (delegate), with Approve tucked into the dropdown.
   let primary: {
     label: string;
     onClick: () => void;
@@ -957,28 +984,15 @@ function ActionFooter(props: FooterProps) {
     if (mustClaim) {
       primary = { label: "Claim to review", onClick: onClaim };
       options = [];
-    } else if (canAct) {
+    } else if (isAssignee && canAct) {
       primary = { label: "Approve", onClick: onApprove };
-      options = [
-        {
-          label: "Approve & Post to QBO",
-          description: qboConnected
-            ? "Sends to QuickBooks immediately"
-            : "Connect QuickBooks in Settings first",
-          onSelect: onApproveAndPost,
-          disabled: !qboConnected,
-          icon: <PaperAirplaneIcon className="h-4 w-4" />,
-        },
-      ];
-      // Admins can hand the invoice off to a teammate instead of approving it.
-      if (isAdmin) {
-        options.push({
-          label: invoice.assigned_to_id ? "Reassign…" : "Assign to teammate…",
-          description: "Hand off to a team member to review",
-          onSelect: onAssign,
-          icon: <UserPlusIcon className="h-4 w-4" />,
-        });
-      }
+      options = isAdmin ? [approveAndPostOption, assignOption] : [approveAndPostOption];
+    } else if (isAdmin) {
+      primary = {
+        label: invoice.assigned_to_id ? "Reassign" : "Assign",
+        onClick: onAssign,
+      };
+      options = [approveOption, approveAndPostOption];
     } else {
       // A member who isn't the assignee has nothing to do here.
       return null;
@@ -1078,8 +1092,10 @@ function ActionFooter(props: FooterProps) {
         </div>
 
         {/* Desktop button row — appears inline at sm+; mobile gets a single
-            full-width SplitButton below. */}
-        <div className="hidden sm:flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            full-width SplitButton below. items-stretch keeps every control the
+            same height despite their different styles (the bordered "secondary"
+            is otherwise a touch taller). */}
+        <div className="hidden sm:flex items-stretch gap-2 flex-wrap sm:flex-nowrap">
           {isReapproving && (
             <Button variant="ghost" onClick={onCancelEdit}>
               Cancel
