@@ -25,6 +25,13 @@ interface Props {
    *  The route page subscribes to drive the live stamp preview rendered
    *  next to the PDF, without lifting the entire form state up. */
   onCodingChange?: (draft: CodingDraft) => void;
+  /** Optional — fires when the vendor label or total changes, so the
+   *  identity header can update live without lifting the whole form. */
+  onSummaryChange?: (summary: {
+    vendorLabel: string;
+    totalCents: number | null;
+    currency: string;
+  }) => void;
   disabled?: boolean;
 }
 
@@ -113,7 +120,7 @@ function toPatch(s: FormState): InvoicePatchPayload {
   };
 }
 
-export function ExtractedFieldsForm({ invoice, vendors, projects, onChange, onCodingChange, disabled }: Props) {
+export function ExtractedFieldsForm({ invoice, vendors, projects, onChange, onCodingChange, onSummaryChange, disabled }: Props) {
   const [form, setForm] = useState<FormState>(() => fromInvoice(invoice));
   const codingOptionsQuery = useCodingOptions();
   const codingGroups = useMemo(
@@ -213,38 +220,19 @@ export function ExtractedFieldsForm({ invoice, vendors, projects, onChange, onCo
   const dueBeforeInvoice =
     !!form.invoice_date && !!form.due_date && form.due_date < form.invoice_date;
 
+  // Feed vendor label + live total to the identity header, mirroring
+  // onCodingChange — keeps the header in sync without lifting the whole form.
+  useEffect(() => {
+    onSummaryChange?.({
+      vendorLabel: selectedVendor?.display_name || form.vendor_name || "",
+      totalCents,
+      currency: form.currency || "USD",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedVendor?.display_name, form.vendor_name, totalCents, form.currency]);
+
   return (
     <div className="space-y-4">
-      {/* ---------- Summary card ---------- */}
-      <div className="bg-navy text-stone p-5 border-l-2 border-amber relative overflow-hidden">
-        <div className="absolute inset-0 bg-grid opacity-50 pointer-events-none" />
-        <div className="relative flex items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-amber mb-1">
-              Vendor
-            </div>
-            <div className="font-display text-xl leading-tight truncate">
-              {selectedVendor?.display_name ||
-                form.vendor_name ||
-                <span className="text-stone/50 italic">Unassigned</span>}
-            </div>
-            {form.invoice_number && (
-              <div className="text-xs text-stone/60 font-mono mt-1">
-                Invoice #{form.invoice_number}
-              </div>
-            )}
-          </div>
-          <div className="text-right flex-shrink-0">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-amber mb-1">
-              Total
-            </div>
-            <div className="font-display text-2xl leading-none tabular-nums">
-              {formatCents(totalCents, form.currency)}
-            </div>
-          </div>
-        </div>
-      </div>
-
       <fieldset disabled={disabled} className="space-y-4 min-w-0">
         {/* ---------- Cambridge AP coding markup ----------
             Highest priority section — these fields drive the project +

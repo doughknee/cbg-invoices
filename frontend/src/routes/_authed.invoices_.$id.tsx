@@ -9,21 +9,19 @@ import {
   ExclamationTriangleIcon,
   PaperAirplaneIcon,
   PencilSquareIcon,
-  UserCircleIcon,
   XCircleIcon,
 } from "@heroicons/react/24/outline";
 // ClockIcon stays in scope below — used in the StatusBanner for the
 // "approved but QBO disconnected" case.
-import { PageHeader } from "@/components/layout/AppShell";
 import { useMobileAppBar } from "@/components/layout/MobileAppBar";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { Button } from "@/components/ui/Button";
 import { SplitButton, type SplitButtonOption } from "@/components/ui/SplitButton";
 import {
   DocumentTypeBadge,
-  StatusBadge,
   TriageReasonBadge,
 } from "@/components/invoices/StatusBadge";
+import { InvoiceIdentityHeader } from "@/components/invoices/InvoiceIdentityHeader";
 import { PdfViewer } from "@/components/invoices/PdfViewer";
 import { ExtractedFieldsForm } from "@/components/invoices/ExtractedFieldsForm";
 import { StampPreviewOverlay, type StampPosition } from "@/components/invoices/StampPreview";
@@ -136,6 +134,14 @@ function InvoiceDetailPage() {
   const [assignFlow, setAssignFlow] = useState<
     null | "assign" | "reassign"
   >(null);
+
+  // Live vendor + total from the edit form, so the identity header reflects
+  // unsaved edits. Null while not editing — header falls back to saved values.
+  const [headerDraft, setHeaderDraft] = useState<{
+    vendorLabel: string;
+    totalCents: number | null;
+    currency: string;
+  } | null>(null);
 
   const invoice = invoiceQuery.data;
   const me = meQuery.data;
@@ -355,20 +361,30 @@ function InvoiceDetailPage() {
     else if (assignFlow === "reassign") await handleReassign(member);
   }
 
+  const resolvedVendorName =
+    vendorsQuery.data?.vendors.find((v) => v.id === invoice.vendor_id)?.display_name ||
+    invoice.vendor_name ||
+    "";
+  const headerVendor =
+    showEditor && headerDraft ? headerDraft.vendorLabel : resolvedVendorName;
+  const headerTotalCents =
+    showEditor && headerDraft ? headerDraft.totalCents : invoice.total_cents;
+  const headerCurrency =
+    showEditor && headerDraft ? headerDraft.currency : invoice.currency;
+
   return (
     <>
-      <PageHeader
-        title="Review"
-        accent="Invoice"
-        subtitle={`Received ${new Date(invoice.received_at).toLocaleString()}`}
-        actions={
-          <div className="flex items-center gap-3">
-            <StatusBadge status={invoice.status} />
-            <Button variant="ghost" size="sm" onClick={() => navigate({ to: "/invoices" })}>
-              ← Queue
-            </Button>
-          </div>
-        }
+      <InvoiceIdentityHeader
+        invoice={invoice}
+        vendorLabel={headerVendor}
+        totalCents={headerTotalCents}
+        currency={headerCurrency}
+        onBack={() => navigate({ to: "/invoices" })}
+        canManage={canManageAssignments}
+        showAssignActions={mode === "review" || invoice.status === "approved"}
+        onReassign={() => setAssignFlow("reassign")}
+        onRemove={() => unassign.mutate()}
+        onNotify={() => setShowNotify(true)}
       />
 
       {/* Context banners */}
@@ -396,44 +412,6 @@ function InvoiceDetailPage() {
           </Button>
         )}
       </StatusBanner>
-
-      {/* Assignment chip (visible any time the invoice has one) */}
-      {invoice.assigned_to_id && (
-        <div className="mb-4 inline-flex items-center gap-2 text-xs bg-white border border-slate-300 px-3 py-1.5">
-          <UserCircleIcon className="h-4 w-4 text-slate-500" />
-          <span className="text-slate-500 uppercase tracking-wider text-[10px] font-semibold">
-            Assigned to
-          </span>
-          <span className="text-graphite font-medium">
-            {invoice.assigned_to_name || invoice.assigned_to_email || invoice.assigned_to_id}
-          </span>
-          {canManageAssignments && (mode === "review" || invoice.status === "approved") && (
-            <>
-              <button
-                type="button"
-                onClick={() => setAssignFlow("reassign")}
-                className="ml-2 text-slate-400 hover:text-navy"
-              >
-                Change
-              </button>
-              <button
-                type="button"
-                onClick={() => unassign.mutate()}
-                className="text-slate-400 hover:text-red-700"
-              >
-                Remove
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowNotify(true)}
-                className="text-slate-400 hover:text-navy"
-              >
-                Notify
-              </button>
-            </>
-          )}
-        </div>
-      )}
 
       {/* Two-column on lg+; PDF on top, form below on smaller screens. */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-6">
@@ -517,6 +495,7 @@ function InvoiceDetailPage() {
                 setDirty(true);
               }}
               onCodingChange={setCodingDraft}
+              onSummaryChange={setHeaderDraft}
               disabled={!canReviewActions}
             />
           ) : (

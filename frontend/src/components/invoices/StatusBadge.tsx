@@ -66,6 +66,22 @@ export function StatusBadge({ status }: { status: InvoiceStatus }) {
 }
 
 /**
+ * Status label + dot color, for rendering a status pill on custom (dark)
+ * backgrounds — e.g. the navy identity header — where the standard
+ * light-fill Badge tones (amber/navy) don't have enough contrast.
+ */
+export function getStatusMeta(status: InvoiceStatus): {
+  label: string;
+  dotColor?: string;
+  pulseDot?: boolean;
+} {
+  const cfg = STATUS_CONFIG[status];
+  return cfg
+    ? { label: cfg.label, dotColor: cfg.dotColor, pulseDot: cfg.pulseDot }
+    : { label: status };
+}
+
+/**
  * Compact secondary indicator that adds context to an "approved" row inside
  * the merged Approved tab. Renders nothing for invoices in any other state.
  *
