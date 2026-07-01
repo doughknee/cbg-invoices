@@ -16,5 +16,6 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "sync", label: "Sync settings", requiresQbo: true },
   { id: "coding", label: "AP coding" },
   { id: "domains", label: "Trusted senders" },
+  { id: "my-notifications", label: "My notifications" },
   { id: "notifications", label: "Notifications" },
 ];

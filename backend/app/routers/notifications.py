@@ -13,6 +13,8 @@ from app.schemas.notification import (
     ManualNotificationRequest,
     NotificationSettingsOut,
     NotificationSettingsPatch,
+    UserNotificationPrefsOut,
+    UserNotificationPrefsPatch,
 )
 from app.services import logto_admin
 from app.services import notifications as notif
@@ -65,6 +67,37 @@ async def patch_notification_settings(
 
     await session.commit()
     return NotificationSettingsOut.model_validate(cfg)
+
+
+# ---------- Per-user preferences (self-serve, no admin gate) ----------
+
+
+@router.get("/preferences", response_model=UserNotificationPrefsOut)
+async def get_my_preferences(
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    """Return the caller's own notification preferences (any authenticated user)."""
+    prefs = await notif.get_user_prefs(session, user.id)
+    await session.commit()
+    return UserNotificationPrefsOut.model_validate(prefs)
+
+
+@router.patch("/preferences", response_model=UserNotificationPrefsOut)
+async def patch_my_preferences(
+    body: UserNotificationPrefsPatch,
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    """Update the caller's own notification preferences."""
+    prefs = await notif.get_user_prefs(session, user.id)
+    updates = body.model_dump(exclude_unset=True)
+    if "assignment_emails" in updates:
+        prefs.assignment_emails = updates["assignment_emails"]
+    if "digest_emails" in updates:
+        prefs.digest_emails = updates["digest_emails"]
+    await session.commit()
+    return UserNotificationPrefsOut.model_validate(prefs)
 
 
 @router.post("/send")

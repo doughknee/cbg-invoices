@@ -167,6 +167,10 @@ export interface QboStatus {
   realm_id: string | null;
   expires_at: string | null;
   refresh_expires_at: string | null;
+  /** Refresh token is expired or close to it — prompt the user to reconnect. */
+  needs_reconnect: boolean;
+  /** No default expense account set (saved or via env) — posting will fail. */
+  needs_expense_account: boolean;
   last_vendor_sync_at: string | null;
   last_project_sync_at: string | null;
   project_source: "Customer" | "Class";

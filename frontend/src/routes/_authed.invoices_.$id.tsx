@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowPathIcon,
@@ -302,7 +302,7 @@ function InvoiceDetailPage() {
     setForceEdit(false);
   }
 
-  async function handleAssign(member: TeamMember | null) {
+  async function handleAssign(member: TeamMember | null, notify: boolean) {
     if (!member) {
       setAssignFlow(null);
       return;
@@ -312,6 +312,7 @@ function InvoiceDetailPage() {
       user_id: member.id,
       user_email: member.email,
       user_name: member.name,
+      notify,
     });
     setAssignFlow(null);
     setForceEdit(false);
@@ -326,7 +327,7 @@ function InvoiceDetailPage() {
     setBurstPoll(true);
   }
 
-  async function handleReassign(member: TeamMember | null) {
+  async function handleReassign(member: TeamMember | null, notify: boolean) {
     if (!member) {
       setAssignFlow(null);
       return;
@@ -336,6 +337,7 @@ function InvoiceDetailPage() {
       user_id: member.id,
       user_email: member.email,
       user_name: member.name,
+      notify,
     });
     setAssignFlow(null);
   }
@@ -376,10 +378,13 @@ function InvoiceDetailPage() {
     reassign: "Reassign",
   };
 
-  async function onPickerSelect(member: TeamMember | null) {
+  async function onPickerSelect(
+    member: TeamMember | null,
+    opts: { notify: boolean } = { notify: true },
+  ) {
     if (!assignFlow) return;
-    if (assignFlow === "assign") await handleAssign(member);
-    else if (assignFlow === "reassign") await handleReassign(member);
+    if (assignFlow === "assign") await handleAssign(member, opts.notify);
+    else if (assignFlow === "reassign") await handleReassign(member, opts.notify);
   }
 
   const resolvedVendorName =
@@ -734,6 +739,60 @@ function StatusBanner({
           <strong>Approved.</strong> Connect QuickBooks to post, or click{" "}
           <em>Post to QBO</em> once connected.
         </div>
+      </div>
+    );
+  }
+  if (invoice.status === "approved" && qboConnected && qbo?.needs_expense_account) {
+    return (
+      <div className={`${base} bg-red-50 border-red-700`}>
+        <ExclamationTriangleIcon className="h-5 w-5 text-red-700 flex-shrink-0 mt-0.5" />
+        <div className="flex-1 text-sm text-red-900">
+          <strong>No default expense account set.</strong> Posting will fail
+          until one is chosen.{" "}
+          {isAdmin ? (
+            <>
+              Set it on the{" "}
+              <Link
+                to="/settings"
+                search={{ qbo_connected: undefined, qbo_error: undefined }}
+                className="underline font-semibold"
+              >
+                Settings
+              </Link>{" "}
+              page.
+            </>
+          ) : (
+            <>Ask an admin to set one in Settings.</>
+          )}
+        </div>
+        {children}
+      </div>
+    );
+  }
+  if (invoice.status === "approved" && qbo?.needs_reconnect) {
+    return (
+      <div className={`${base} bg-amber/10 border-amber`}>
+        <ExclamationTriangleIcon className="h-5 w-5 text-amber flex-shrink-0 mt-0.5" />
+        <div className="flex-1 text-sm text-navy">
+          <strong>QuickBooks needs reconnecting.</strong> The authorization has
+          expired or is about to, so posting may fail.{" "}
+          {isAdmin ? (
+            <>
+              Reconnect it on the{" "}
+              <Link
+                to="/settings"
+                search={{ qbo_connected: undefined, qbo_error: undefined }}
+                className="underline font-semibold"
+              >
+                Settings
+              </Link>{" "}
+              page.
+            </>
+          ) : (
+            <>Ask an admin to reconnect it in Settings.</>
+          )}
+        </div>
+        {children}
       </div>
     );
   }

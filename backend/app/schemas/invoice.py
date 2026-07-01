@@ -173,3 +173,7 @@ class AssignInvoiceRequest(BaseModel):
     user_id: str = Field(min_length=1, max_length=256)
     user_email: str | None = Field(default=None, max_length=256)
     user_name: str | None = Field(default=None, max_length=256)
+    # Whether to email the new assignee. Admins can assign quietly by sending
+    # this false. Defaults true to preserve prior behaviour. The recipient's
+    # own preference can still suppress the email even when this is true.
+    notify: bool = True

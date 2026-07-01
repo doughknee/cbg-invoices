@@ -22,6 +22,20 @@ class NotificationSettingsPatch(BaseModel):
     daily_digest_timezone: str | None = None
 
 
+class UserNotificationPrefsOut(BaseModel):
+    """The current user's own notification preferences."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    assignment_emails: bool
+    digest_emails: bool
+
+
+class UserNotificationPrefsPatch(BaseModel):
+    assignment_emails: bool | None = None
+    digest_emails: bool | None = None
+
+
 class ManualRecipient(BaseModel):
     email: str = Field(min_length=3, max_length=256)
     name: str | None = Field(default=None, max_length=256)

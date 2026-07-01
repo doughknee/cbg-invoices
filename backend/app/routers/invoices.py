@@ -39,6 +39,7 @@ from app.services import (
     storage,
     trusted_domains,
 )
+from app.services import notifications as notif
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["invoices"])
@@ -583,13 +584,19 @@ async def assign_invoice(
     )
     await session.commit()
 
-    # Best-effort email to the new assignee — only when the assignment actually
-    # changed to someone other than the person doing the assigning.
-    if assignment_notify.should_notify(
-        new_assignee_id=body.user_id,
-        previous_assignee_id=previous_assignee_id,
-        actor_id=user.id,
-        to_email=body.user_email,
+    # Best-effort email to the new assignee. Three gates must all pass:
+    #   1. the admin didn't opt out of notifying for this assignment (body.notify)
+    #   2. the assignment actually changed to someone other than the assigner
+    #   3. the recipient hasn't turned assignment emails off in their prefs
+    if (
+        body.notify
+        and assignment_notify.should_notify(
+            new_assignee_id=body.user_id,
+            previous_assignee_id=previous_assignee_id,
+            actor_id=user.id,
+            to_email=body.user_email,
+        )
+        and await notif.assignment_emails_allowed(session, body.user_id)
     ):
         background.add_task(
             assignment_notify.notify_assignment,

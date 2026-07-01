@@ -18,6 +18,7 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./test.db")
 
 from app.models.audit_log import AuditLog
 from app.models.invoice import Invoice, InvoiceStatus
+from app.models.user_notification_prefs import UserNotificationPrefs
 from app.routers import invoices
 from app.schemas.invoice import AssignInvoiceRequest
 
@@ -27,6 +28,7 @@ async def _session_factory(tmp_path, name: str) -> async_sessionmaker[AsyncSessi
     async with engine.begin() as conn:
         await conn.run_sync(Invoice.__table__.create)
         await conn.run_sync(AuditLog.__table__.create)
+        await conn.run_sync(UserNotificationPrefs.__table__.create)
     return async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
@@ -140,3 +142,56 @@ async def test_reassign_resets_claim(tmp_path, monkeypatch: pytest.MonkeyPatch) 
         refreshed = await session.get(Invoice, inv.id)
         assert refreshed.assigned_to_id == "user-2"
         assert refreshed.claimed_at is None  # claim signal cleared on reassignment
+
+
+# ---------- assignment email gating ----------
+
+
+@pytest.mark.asyncio
+async def test_assign_queues_email_by_default(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_role(monkeypatch, "admin")
+    factory = await _session_factory(tmp_path, "assign_email")
+    async with factory() as session:
+        inv = await _make_invoice(session, assigned_to_id=None)
+        body = AssignInvoiceRequest(
+            user_id="user-2", user_email="u2@example.com", user_name="U2"
+        )
+        bg = BackgroundTasks()
+        await invoices.assign_invoice(inv.id, body, _user("admin-1"), session, bg)
+        assert len(bg.tasks) == 1  # email queued
+
+
+@pytest.mark.asyncio
+async def test_assign_notify_false_skips_email(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_role(monkeypatch, "admin")
+    factory = await _session_factory(tmp_path, "assign_quiet")
+    async with factory() as session:
+        inv = await _make_invoice(session, assigned_to_id=None)
+        body = AssignInvoiceRequest(
+            user_id="user-2",
+            user_email="u2@example.com",
+            user_name="U2",
+            notify=False,
+        )
+        bg = BackgroundTasks()
+        await invoices.assign_invoice(inv.id, body, _user("admin-1"), session, bg)
+        assert bg.tasks == []  # admin assigned quietly — no email
+        # The assignment itself still happened.
+        assert (await session.get(Invoice, inv.id)).assigned_to_id == "user-2"
+
+
+@pytest.mark.asyncio
+async def test_assign_respects_recipient_optout(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_role(monkeypatch, "admin")
+    factory = await _session_factory(tmp_path, "assign_optout")
+    async with factory() as session:
+        session.add(
+            UserNotificationPrefs(user_id="user-2", assignment_emails=False)
+        )
+        inv = await _make_invoice(session, assigned_to_id=None)
+        body = AssignInvoiceRequest(
+            user_id="user-2", user_email="u2@example.com", user_name="U2"
+        )
+        bg = BackgroundTasks()
+        await invoices.assign_invoice(inv.id, body, _user("admin-1"), session, bg)
+        assert bg.tasks == []  # recipient opted out of assignment emails

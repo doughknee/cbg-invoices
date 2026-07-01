@@ -78,7 +78,8 @@ async def _run(session: AsyncSession, invoice_id: UUID) -> None:
     token = (
         await session.execute(select(QboToken).where(QboToken.id == 1))
     ).scalar_one_or_none()
-    if token is None:
+    if token is None or not token.access_token:
+        # A disconnected row keeps its config but has null auth fields.
         raise qbo_client.QboNotConnectedError("QBO is not connected")
 
     default_account_id = _default_expense_account_id(token)

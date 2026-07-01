@@ -189,6 +189,8 @@ export interface AssignPayload {
   user_id: string;
   user_email?: string | null;
   user_name?: string | null;
+  /** Email the new assignee. Defaults true server-side; send false to assign quietly. */
+  notify?: boolean;
 }
 
 export function useAssignInvoice(id: string) {

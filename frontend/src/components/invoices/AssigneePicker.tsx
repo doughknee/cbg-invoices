@@ -10,7 +10,7 @@ interface Props {
   description?: string;
   confirmLabel?: string;
   onClose: () => void;
-  onSelect: (user: TeamMember | null) => void;
+  onSelect: (user: TeamMember | null, opts: { notify: boolean }) => void;
   loading?: boolean;
 }
 
@@ -26,6 +26,7 @@ export function AssigneePicker({
   const { data, isLoading, error } = useUsers({ enabled: open });
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [notify, setNotify] = useState(true);
 
   const members = (data?.users ?? []).filter((m) => {
     if (!query) return true;
@@ -37,10 +38,14 @@ export function AssigneePicker({
     );
   });
 
+  const selectedMember = data?.users.find((m) => m.id === selectedId);
+  // The email needs somewhere to go — if the picked member has no address,
+  // there's nothing to send and the toggle would be misleading.
+  const selectedHasEmail = !!selectedMember?.email;
+
   function handleConfirm() {
-    if (!selectedId) return;
-    const member = data?.users.find((m) => m.id === selectedId);
-    if (member) onSelect(member);
+    if (!selectedMember) return;
+    onSelect(selectedMember, { notify: notify && selectedHasEmail });
   }
 
   return (
@@ -120,7 +125,27 @@ export function AssigneePicker({
           </ul>
         </div>
 
-        <footer className="p-5 bg-stone/40 border-t border-stone/60 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
+        <footer className="p-5 bg-stone/40 border-t border-stone/60 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
+          <label
+            className={`flex items-center gap-2 text-sm ${
+              selectedHasEmail ? "text-graphite" : "text-slate-400"
+            }`}
+            title={
+              selectedHasEmail
+                ? undefined
+                : "This member has no email address on file."
+            }
+          >
+            <input
+              type="checkbox"
+              checked={notify && selectedHasEmail}
+              disabled={!selectedHasEmail}
+              onChange={(e) => setNotify(e.target.checked)}
+              className="h-4 w-4 accent-amber"
+            />
+            Email the assignee
+          </label>
+          <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-2">
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
@@ -132,6 +157,7 @@ export function AssigneePicker({
           >
             {confirmLabel}
           </Button>
+          </div>
         </footer>
       </div>
     </BottomSheet>

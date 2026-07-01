@@ -143,7 +143,8 @@ async def save_token(
 
 async def ensure_fresh_token(session: AsyncSession) -> QboToken:
     token = await get_stored_token(session)
-    if token is None:
+    if token is None or not token.access_token or not token.refresh_token:
+        # No row, or a disconnected row whose auth fields were cleared.
         raise QboNotConnectedError("QBO is not connected")
 
     now = datetime.now(UTC)
@@ -170,10 +171,20 @@ async def ensure_fresh_token(session: AsyncSession) -> QboToken:
 
 
 async def revoke_token(session: AsyncSession) -> None:
-    """Delete stored QBO token. We don't attempt to notify Intuit."""
+    """Disconnect QBO by clearing the OAuth fields, keeping the row.
+
+    We deliberately do NOT delete the row: ``default_expense_account_id`` and
+    ``project_source`` live here, and wiping them on reconnect silently breaks
+    posting. Nulling only the auth fields leaves that config intact for the next
+    connect. We don't attempt to notify Intuit.
+    """
     token = await get_stored_token(session)
     if token is not None:
-        await session.delete(token)
+        token.realm_id = None
+        token.access_token = None
+        token.refresh_token = None
+        token.expires_at = None
+        token.refresh_expires_at = None
         await session.flush()
 
 
