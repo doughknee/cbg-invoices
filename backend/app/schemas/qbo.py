@@ -14,6 +14,13 @@ class QboStatus(BaseModel):
     environment: str = "sandbox"
     expires_at: datetime | None = None
     refresh_expires_at: datetime | None = None
+    # True when the refresh token has lapsed (or is about to). Once the refresh
+    # token dies, posting silently fails until someone reconnects, so the UI
+    # uses this to prompt a reconnect proactively instead of after a failed post.
+    needs_reconnect: bool = False
+    # True when no default expense account is configured (neither saved nor via
+    # env). Posting fails without one, so the UI warns before a post is tried.
+    needs_expense_account: bool = False
     last_vendor_sync_at: datetime | None = None
     last_project_sync_at: datetime | None = None
     project_source: str = "Customer"

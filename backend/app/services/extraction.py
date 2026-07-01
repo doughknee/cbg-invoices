@@ -622,10 +622,18 @@ async def _match_vendor(session: AsyncSession, vendor_name: str) -> UUID | None:
         return None
 
     choices = {v.id: v.display_name for v in vendors}
+    # token_set_ratio (not WRatio): a vendor name is a bag of words, and we want
+    # a match only when the two names genuinely share words. WRatio's partial-
+    # substring component over-scores unrelated names — e.g. it rated
+    # "VannGo Luxury Mobile Restrooms & Portables (Outside Sales)" against
+    # "Cathryne & David Hall" at 85.5, just over the cutoff, and silently
+    # assigned the wrong vendor. token_set_ratio scores that pair ~28 while
+    # keeping real matches (abbreviations, trailing "LLC", "(Outside Sales)")
+    # comfortably in the 88–100 range.
     best = fuzz_process.extractOne(
         vendor_name,
         choices,
-        scorer=fuzz.WRatio,
+        scorer=fuzz.token_set_ratio,
     )
     if best is None:
         return None

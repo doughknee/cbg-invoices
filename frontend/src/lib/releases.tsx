@@ -9,11 +9,14 @@ import {
   ArrowUpTrayIcon,
   BellIcon,
   BookmarkIcon,
+  BuildingStorefrontIcon,
   CheckBadgeIcon,
   ClockIcon,
   Cog6ToothIcon,
   DocumentTextIcon,
+  EnvelopeIcon,
   InboxIcon,
+  LinkIcon,
   SparklesIcon,
 } from "@heroicons/react/24/outline";
 
@@ -42,6 +45,45 @@ export interface Release {
 }
 
 export const RELEASES: Release[] = [
+  {
+    version: "0.2.2",
+    date: "July 1, 2026",
+    headline: "Notifications on your terms",
+    summary:
+      "Decide which emails reach you — plus steadier QuickBooks posting and smarter vendor matching.",
+    sections: [
+      {
+        kind: "new",
+        items: [
+          {
+            Icon: EnvelopeIcon,
+            title: "Assign without emailing",
+            body: "Assigning an invoice now has an “Email the assignee” checkbox, so you can hand something off quietly or notify them — your call, every time.",
+          },
+          {
+            Icon: BellIcon,
+            title: "Choose your own notifications",
+            body: "Settings → My notifications lets each person turn off assignment emails or the daily digest just for themselves, without affecting anyone else.",
+          },
+        ],
+      },
+      {
+        kind: "improved",
+        items: [
+          {
+            Icon: LinkIcon,
+            title: "QuickBooks won't catch you out",
+            body: "The app now warns you before posting can fail — when QuickBooks needs reconnecting, or when no default expense account is set — right on Settings and on the invoice. And reconnecting QuickBooks no longer clears your expense-account and project settings.",
+          },
+          {
+            Icon: BuildingStorefrontIcon,
+            title: "More accurate vendor matching",
+            body: "Invoices now fill in the vendor only when it's a genuine match. An unfamiliar vendor used to occasionally be matched to the wrong one; now it's left for you to pick instead of guessing.",
+          },
+        ],
+      },
+    ],
+  },
   {
     version: "0.2.1",
     date: "June 24, 2026",

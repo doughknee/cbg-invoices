@@ -25,6 +25,22 @@ router = APIRouter(tags=["qbo"])
 # is a generous ceiling that still bounds the CSRF replay window.
 OAUTH_STATE_TTL = timedelta(minutes=30)
 
+# Warn the UI to reconnect this far ahead of refresh-token expiry. Intuit's
+# refresh token lasts ~100 days and rolls forward on each use, so it only
+# lapses after a long idle stretch — a few days' warning is plenty.
+RECONNECT_WARNING_WINDOW = timedelta(days=3)
+
+
+def _needs_reconnect(refresh_expires_at: datetime | None) -> bool:
+    """True when the refresh token is missing, expired, or within the warning
+    window — i.e. when a connected token can no longer be relied on to post."""
+    if refresh_expires_at is None:
+        return True
+    exp = refresh_expires_at
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=UTC)
+    return exp <= datetime.now(UTC) + RECONNECT_WARNING_WINDOW
+
 
 async def _oauth_state_is_valid(session: AsyncSession, state: str | None) -> bool:
     """Confirm the callback's ``state`` matches one we recently issued.
@@ -56,14 +72,24 @@ async def qbo_status(
 ):
     settings = get_settings()
     token = await qbo_client.get_stored_token(session)
-    if token is None:
+    # A disconnected row is kept (to preserve config) but has null auth — treat
+    # "connected" as "has an access token", not merely "row exists".
+    if token is None or not token.access_token:
         return QboStatus(connected=False, environment=settings.qbo_environment)
+    # Posting needs a default expense account, from the saved config or the env
+    # fallback. Surface when neither is set so the UI can warn before a post
+    # fails with "No default expense account configured".
+    needs_expense_account = not (
+        token.default_expense_account_id or settings.qbo_default_expense_account_id
+    )
     return QboStatus(
         connected=True,
         environment=settings.qbo_environment,
         realm_id=token.realm_id,
         expires_at=token.expires_at,
         refresh_expires_at=token.refresh_expires_at,
+        needs_reconnect=_needs_reconnect(token.refresh_expires_at),
+        needs_expense_account=needs_expense_account,
         last_vendor_sync_at=token.last_vendor_sync_at,
         last_project_sync_at=token.last_project_sync_at,
         project_source=token.project_source or "Customer",
@@ -160,7 +186,7 @@ async def qbo_settings(
     session: Annotated[AsyncSession, Depends(get_session)],
 ):
     token = await qbo_client.get_stored_token(session)
-    if token is None:
+    if token is None or not token.access_token:
         raise HTTPException(status_code=400, detail="QBO is not connected")
     updates = body.model_dump(exclude_unset=True)
     if "project_source" in updates:

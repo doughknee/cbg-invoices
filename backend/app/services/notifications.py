@@ -25,6 +25,7 @@ from app.config import get_settings
 from app.db import AsyncSessionLocal
 from app.models.invoice import Invoice, InvoiceStatus
 from app.models.notification_settings import NotificationSettings
+from app.models.user_notification_prefs import UserNotificationPrefs
 from app.services import audit
 from app.services import email as email_service
 
@@ -46,6 +47,38 @@ async def get_or_create_settings(session: AsyncSession) -> NotificationSettings:
         session.add(row)
         await session.flush()
     return row
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Per-user preferences
+# ──────────────────────────────────────────────────────────────────────────
+
+
+async def get_user_prefs(session: AsyncSession, user_id: str) -> UserNotificationPrefs:
+    """Fetch (or lazily create) a user's notification preferences row."""
+    row = await session.get(UserNotificationPrefs, user_id)
+    if row is None:
+        row = UserNotificationPrefs(user_id=user_id)
+        session.add(row)
+        await session.flush()
+    return row
+
+
+async def assignment_emails_allowed(session: AsyncSession, user_id: str) -> bool:
+    """Whether ``user_id`` wants assignment emails. Defaults on (no row → True).
+
+    Read-only: never creates a row, so a plain assignment doesn't write prefs.
+    """
+    row = await session.get(UserNotificationPrefs, user_id)
+    return True if row is None else row.assignment_emails
+
+
+async def digest_opted_out_user_ids(session: AsyncSession) -> set[str]:
+    """User ids that have turned the daily digest off."""
+    stmt = select(UserNotificationPrefs.user_id).where(
+        UserNotificationPrefs.digest_emails.is_(False)
+    )
+    return set((await session.execute(stmt)).scalars().all())
 
 
 def validate_time(value: str) -> str:
@@ -92,7 +125,12 @@ async def _pending_by_assignee(session: AsyncSession) -> dict[str, dict]:
     grouped: dict[str, dict] = {}
     for inv in rows:
         bucket = grouped.setdefault(
-            inv.assigned_to_email, {"name": inv.assigned_to_name, "invoices": []}
+            inv.assigned_to_email,
+            {
+                "name": inv.assigned_to_name,
+                "user_id": inv.assigned_to_id,
+                "invoices": [],
+            },
         )
         bucket["invoices"].append(inv)
     return grouped
@@ -107,8 +145,13 @@ async def send_daily_digest(session: AsyncSession) -> dict:
     """
     app = get_settings()
     grouped = await _pending_by_assignee(session)
+    opted_out = await digest_opted_out_user_ids(session)
     sent = 0
+    skipped_opt_out = 0
     for email_addr, bucket in grouped.items():
+        if bucket.get("user_id") in opted_out:
+            skipped_opt_out += 1
+            continue
         invoices = bucket["invoices"]
         try:
             await email_service.send_email(
@@ -127,9 +170,16 @@ async def send_daily_digest(session: AsyncSession) -> dict:
     await audit.record_system(
         session,
         action="daily_digest_sent",
-        message=f"recipients={sent} pending_users={len(grouped)}",
+        message=(
+            f"recipients={sent} pending_users={len(grouped)} "
+            f"opted_out={skipped_opt_out}"
+        ),
     )
-    return {"recipients": sent, "pending_users": len(grouped)}
+    return {
+        "recipients": sent,
+        "pending_users": len(grouped),
+        "opted_out": skipped_opt_out,
+    }
 
 
 async def _maybe_send_digest(session: AsyncSession) -> None:

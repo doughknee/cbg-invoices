@@ -7,6 +7,7 @@ from app.models.notification_settings import NotificationSettings
 from app.models.project import Project
 from app.models.qbo_token import QboToken
 from app.models.trusted_sender_domain import SOURCE_VALUES, TrustedSenderDomain
+from app.models.user_notification_prefs import UserNotificationPrefs
 from app.models.vendor import Vendor
 
 __all__ = [
@@ -24,5 +25,6 @@ __all__ = [
     "SOURCE_VALUES",
     "TriageReason",
     "TrustedSenderDomain",
+    "UserNotificationPrefs",
     "Vendor",
 ]

@@ -4,6 +4,7 @@ import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/solid";
 import {
   ArrowPathIcon,
   BellIcon,
+  ExclamationTriangleIcon,
   LinkIcon,
   PencilIcon,
   PlusIcon,
@@ -41,8 +42,10 @@ import {
   useTrustedDomains,
 } from "@/lib/trustedDomains";
 import {
+  useMyNotificationPrefs,
   useNotificationSettings,
   useRunDigestNow,
+  useUpdateMyNotificationPrefs,
   useUpdateNotificationSettings,
 } from "@/lib/notifications";
 import { useMe, ROLE_RANK } from "@/lib/users";
@@ -147,6 +150,44 @@ function SettingsPage() {
               <>
                 {connected ? (
                   <div className="space-y-3">
+                    {qbo.needs_reconnect && (
+                      <div className="flex items-start gap-2 border-l-2 border-amber bg-amber/10 px-3 py-2 text-sm text-navy">
+                        <ExclamationTriangleIcon className="h-5 w-5 text-amber flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="font-semibold">
+                            Reconnect QuickBooks soon
+                          </p>
+                          <p className="text-xs text-graphite mt-0.5">
+                            The QuickBooks authorization has expired or is about
+                            to. Posting bills will fail until you reconnect.
+                          </p>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            className="mt-2"
+                            onClick={() => connect.mutate()}
+                            loading={connect.isPending}
+                          >
+                            Reconnect now
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    {qbo.needs_expense_account && (
+                      <div className="flex items-start gap-2 border-l-2 border-red-700 bg-red-50 px-3 py-2 text-sm text-red-900">
+                        <ExclamationTriangleIcon className="h-5 w-5 text-red-700 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="font-semibold">
+                            Set a default expense account
+                          </p>
+                          <p className="text-xs text-red-800 mt-0.5">
+                            Posting bills will fail until one is set. Choose it
+                            under <em>Sync settings → Default expense account</em>{" "}
+                            below.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                     <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                       <Field label="Realm ID" value={qbo.realm_id ?? "—"} mono />
                       <Field
@@ -279,6 +320,9 @@ function SettingsPage() {
             admins can add manual entries for partners not in QBO. */}
         <TrustedDomainsSection />
 
+        {/* Each user's own opt-in/out for the emails they receive. Everyone. */}
+        <MyNotificationsSection />
+
         {/* Daily review digest + send-time config. Admin/owner only. */}
         <NotificationsSection />
       </div>
@@ -294,6 +338,79 @@ const TZ_OPTIONS = [
   "America/Phoenix",
   "UTC",
 ];
+
+// ──────────────────────────────────────────────────────────────────────────
+// My notifications — each user opts in/out of the emails sent to *them*.
+// Visible to everyone (admins included).
+// ──────────────────────────────────────────────────────────────────────────
+
+function MyNotificationsSection() {
+  const { data, isLoading } = useMyNotificationPrefs();
+  const update = useUpdateMyNotificationPrefs();
+
+  // Optimistic toggles — apply immediately and persist; React Query keeps the
+  // cache in sync via onSuccess. Falls back to the fetched value pre-load.
+  const assignment = data?.assignment_emails ?? true;
+  const digest = data?.digest_emails ?? true;
+
+  return (
+    <Card accent="left" id="my-notifications" className="scroll-mt-6">
+      <CardHeader>
+        <h2 className="font-display text-2xl text-navy flex items-center gap-2">
+          <BellIcon className="h-5 w-5 text-amber" aria-hidden />
+          My notifications
+        </h2>
+        <p className="text-xs text-slate-500 mt-1">
+          Choose which emails the portal sends to you. These only affect your
+          own inbox.
+        </p>
+      </CardHeader>
+      <CardBody>
+        {isLoading ? (
+          <p className="text-sm text-slate-500">Loading…</p>
+        ) : (
+          <div className="space-y-3">
+            <label className="flex items-start gap-2 text-sm text-graphite">
+              <input
+                type="checkbox"
+                checked={assignment}
+                disabled={update.isPending}
+                onChange={(e) =>
+                  update.mutate({ assignment_emails: e.target.checked })
+                }
+                className="h-4 w-4 mt-0.5 accent-amber"
+              />
+              <span>
+                Email me when an invoice is assigned to me
+                <span className="block text-xs text-slate-500">
+                  A one-time email the moment something lands in your queue.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-sm text-graphite">
+              <input
+                type="checkbox"
+                checked={digest}
+                disabled={update.isPending}
+                onChange={(e) =>
+                  update.mutate({ digest_emails: e.target.checked })
+                }
+                className="h-4 w-4 mt-0.5 accent-amber"
+              />
+              <span>
+                Send me the daily review digest
+                <span className="block text-xs text-slate-500">
+                  A once-a-day summary of invoices waiting on you. Only sent on
+                  days you have pending invoices.
+                </span>
+              </span>
+            </label>
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // Notifications — daily review digest schedule + a "send now" test. Admins+.
@@ -342,7 +459,9 @@ function NotificationsSection() {
     setDigestResult(
       r.skipped
         ? "Email isn't configured (RESEND_API_KEY)."
-        : `Sent to ${r.recipients} recipient${r.recipients === 1 ? "" : "s"} (${r.pending_users} with pending invoices).`,
+        : `Sent to ${r.recipients} recipient${r.recipients === 1 ? "" : "s"} (${r.pending_users} with pending invoices` +
+            (r.opted_out ? `, ${r.opted_out} opted out` : "") +
+            ").",
     );
   }
 

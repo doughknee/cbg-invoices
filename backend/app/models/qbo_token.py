@@ -2,6 +2,13 @@
 
 Only one row exists at a time (id=1). Cambridge has a single QBO company,
 so we don't need multi-tenant token storage.
+
+Disconnecting clears the OAuth fields (realm_id, tokens, expiries) but keeps
+the row so the durable config below — ``default_expense_account_id`` and
+``project_source`` — survives a disconnect/reconnect. Losing that config on
+reconnect silently broke posting ("No default expense account configured").
+The auth fields are therefore nullable, and "connected" means ``access_token``
+is present, not merely that a row exists.
 """
 from __future__ import annotations
 
@@ -18,11 +25,14 @@ class QboToken(Base):
     __tablename__ = "qbo_tokens"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
-    realm_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    access_token: Mapped[str] = mapped_column(Text, nullable=False)
-    refresh_token: Mapped[str] = mapped_column(Text, nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    refresh_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # OAuth fields — null while disconnected, repopulated on (re)connect.
+    realm_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    access_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    refresh_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     last_vendor_sync_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
