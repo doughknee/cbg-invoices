@@ -1,0 +1,113 @@
+@import "tailwindcss";
+
+@theme {
+  --color-navy: #0b1b25;
+  --color-amber: #c8923c;
+  --color-stone: #ede5d8;
+  --color-graphite: #1b2830;
+
+  --font-display: "DM Serif Display", Georgia, "Times New Roman", serif;
+  --font-body: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+
+  --breakpoint-3xl: 130rem;
+  --breakpoint-4xl: 140rem;
+
+  --spacing-section: 6vw;
+  --spacing-block: 3vw;
+}
+
+html {
+  background-color: var(--color-stone);
+  font-family: var(--font-body);
+}
+
+/* ── Background textures ──────────────────────────────────── */
+
+/* Blueprint-style grid for dark sections — warmer, more visible */
+.bg-grid {
+  background-image: linear-gradient(rgba(196, 146, 58, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(196, 146, 58, 0.03) 1px, transparent 1px),
+    linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
+  background-size: 96px 96px, 96px 96px, 48px 48px, 48px 48px;
+}
+
+/* Fine dot pattern for light sections */
+.bg-dots {
+  background-image: radial-gradient(circle, rgba(11, 27, 37, 0.05) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Crosshatch pattern for accents */
+.bg-crosshatch {
+  background-image: linear-gradient(45deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px),
+    linear-gradient(-45deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Noise grain overlay — adds materiality to dark sections */
+.bg-noise::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.35;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+}
+
+/* ── Parallelogram section slants ──────────────────────────── */
+
+/* First section after hero: flat top, slanted bottom */
+.slant-bottom {
+  --slant: clamp(32px, 5vw, 72px);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--slant)), 0 100%);
+  position: relative;
+}
+
+/* Middle sections: full parallelogram (slanted top + bottom) */
+.slant-both {
+  --slant: clamp(32px, 5vw, 72px);
+  clip-path: polygon(0 var(--slant), 100% 0, 100% calc(100% - var(--slant)), 0 100%);
+  margin-top: calc(-1 * var(--slant));
+  position: relative;
+}
+
+/* Last section: slanted top, flat bottom */
+.slant-top {
+  --slant: clamp(32px, 5vw, 72px);
+  clip-path: polygon(0 var(--slant), 100% 0, 100% 100%, 0 100%);
+  margin-top: calc(-1 * var(--slant));
+  position: relative;
+}
+
+/* ── Scroll indicator pulse ──────────────────────────────── */
+
+@keyframes scroll-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(6px);
+  }
+}
+
+.animate-scroll-pulse {
+  animation: scroll-pulse 2s ease-in-out infinite;
+}
+
+/* ── Accessibility: respect reduced-motion preference ────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
